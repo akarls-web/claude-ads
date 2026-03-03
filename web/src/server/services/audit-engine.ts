@@ -192,9 +192,15 @@ const conversionChecks: CheckFn[] = [
     if (convs.length === 0) return { result: "skipped", details: "No conversions", recommendation: "" };
     const primary = convs.filter((c: any) => c.conversionAction?.includeInConversionsMetric === true && c.conversionAction?.status === "ENABLED");
     if (primary.length === 0) return { result: "skipped", details: "No primary conversions", recommendation: "" };
-    const hasModelData = primary.some((c: any) => c.conversionAction?.attributionModelSettings?.attributionModel);
+    // Exclude Smart Campaign system-managed conversions (attribution model is locked by Google)
+    const nonSmart = primary.filter((c: any) => {
+      const name = (c.conversionAction?.name ?? "").toLowerCase();
+      return !name.startsWith("smart campaign");
+    });
+    if (nonSmart.length === 0) return { result: "pass", details: "All primary conversions are Smart Campaign system-managed (attribution locked by Google)", recommendation: "" };
+    const hasModelData = nonSmart.some((c: any) => c.conversionAction?.attributionModelSettings?.attributionModel);
     if (!hasModelData) return { result: "warning", details: "Attribution model data not available via API", recommendation: "Verify Data-Driven Attribution (DDA) is active for all conversion actions" };
-    const nonDDA = primary.filter((c: any) => {
+    const nonDDA = nonSmart.filter((c: any) => {
       const model = c.conversionAction?.attributionModelSettings?.attributionModel;
       return model && model !== "GOOGLE_SEARCH_ATTRIBUTION_DATA_DRIVEN" && model !== "EXTERNAL";
     });
@@ -326,10 +332,16 @@ const conversionChecks: CheckFn[] = [
     if (convs.length === 0) return { result: "skipped", details: "No conversions", recommendation: "" };
     const primary = convs.filter((c: any) => c.conversionAction?.includeInConversionsMetric === true && c.conversionAction?.status === "ENABLED");
     if (primary.length === 0) return { result: "skipped", details: "No primary conversions to check", recommendation: "" };
-    const hasCountData = primary.some((c: any) => c.conversionAction?.countingType);
-    if (!hasCountData) return { result: "warning", details: `${primary.length} primary conversions — counting type data not available`, recommendation: "Verify all primary conversions use 'Count: One' for lead gen" };
-    const manyPerClick = primary.filter((c: any) => c.conversionAction?.countingType === "MANY_PER_CLICK");
-    if (manyPerClick.length === 0) return { result: "pass", details: `All ${primary.length} primary conversions set to 'One per click'`, recommendation: "" };
+    // Exclude Smart Campaign system-managed conversions (counting type is locked by Google)
+    const nonSmart = primary.filter((c: any) => {
+      const name = (c.conversionAction?.name ?? "").toLowerCase();
+      return !name.startsWith("smart campaign");
+    });
+    if (nonSmart.length === 0) return { result: "pass", details: "All primary conversions are Smart Campaign system-managed (count type locked by Google)", recommendation: "" };
+    const hasCountData = nonSmart.some((c: any) => c.conversionAction?.countingType);
+    if (!hasCountData) return { result: "warning", details: `${nonSmart.length} primary conversions — counting type data not available`, recommendation: "Verify all primary conversions use 'Count: One' for lead gen" };
+    const manyPerClick = nonSmart.filter((c: any) => c.conversionAction?.countingType === "MANY_PER_CLICK");
+    if (manyPerClick.length === 0) return { result: "pass", details: `All ${nonSmart.length} primary conversions set to 'One per click'`, recommendation: "" };
     const countItems = manyPerClick.map((c: any) => `Conversion Action "${c.conversionAction?.name ?? 'Unknown'}" — count set to 'Every' (should be 'One')`);
     return { result: "fail", details: entityDetails(countItems), recommendation: "Switch all lead gen conversions to 'Count: One'. 'Every' counts repeat form fills/calls from the same person, inflating numbers and misleading Smart Bidding" };
   }),
