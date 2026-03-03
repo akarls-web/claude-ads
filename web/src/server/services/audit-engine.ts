@@ -81,7 +81,7 @@ type AuditData = Record<string, any>;
 type CheckFn = (data: AuditData) => AuditCheckResult;
 
 /** Format entity-level detail items, capping at `max` with "and N more" */
-function entityDetails(items: string[], max = 5): string {
+function entityDetails(items: string[], max = 3): string {
   if (items.length <= max) return items.join("\n");
   return items.slice(0, max).join("\n") + `\n…and ${items.length - max} more`;
 }
@@ -447,12 +447,15 @@ const wastedSpendChecks: CheckFn[] = [
       k.campaign?.biddingStrategyType === "MANUAL_CPC"
     );
     if (broadManual.length === 0) return { result: "pass", details: "No broad match keywords using Manual CPC", recommendation: "" };
-    const bmItems = broadManual.slice(0, 5).map((k: any) => {
-      const kwText = k.adGroupCriterion?.keyword?.text ?? "Unknown";
-      const cName = k.campaign?.name ?? k.adGroup?.name ?? "Unknown";
-      return `Keyword "${kwText}" in Campaign "${cName}" \u2014 Broad Match on Manual CPC`;
-    });
-    if (broadManual.length > 5) bmItems.push(`\u2026and ${broadManual.length - 5} more`);
+    // Group by ad group
+    const agMap = new Map<string, { name: string; sample: string; count: number }>();
+    for (const k of broadManual) {
+      const agId = String(k.adGroup?.id ?? "unk");
+      const agName = k.adGroup?.name ?? k.campaign?.name ?? "Unknown";
+      if (!agMap.has(agId)) agMap.set(agId, { name: agName, sample: k.adGroupCriterion?.keyword?.text ?? "?", count: 0 });
+      agMap.get(agId)!.count++;
+    }
+    const bmItems = [...agMap.values()].map(g => `Ad Group "${g.name}" — e.g. keyword "${g.sample}", Broad Match on Manual CPC (${g.count} keywords)`);
     return { result: "fail", details: entityDetails(bmItems), recommendation: "Switch broad match keywords to Smart Bidding (Target CPA/ROAS) or change to phrase/exact match" };
   }),
 
@@ -496,17 +499,21 @@ const wastedSpendChecks: CheckFn[] = [
       Number(k.metrics?.conversions ?? 0) === 0
     );
     if (zeroConv.length === 0) return { result: "pass", details: "No keywords with >100 clicks and 0 conversions", recommendation: "" };
-    const zcItems = zeroConv
-      .sort((a: any, b: any) => Number(b.metrics?.clicks ?? 0) - Number(a.metrics?.clicks ?? 0))
-      .slice(0, 5)
-      .map((k: any) => {
-        const kwText = k.adGroupCriterion?.keyword?.text ?? "Unknown";
-        const agName = k.adGroup?.name ?? k.campaign?.name ?? "Unknown";
-        const clicks = Number(k.metrics?.clicks ?? 0);
-        const spend = microsToValue(k.metrics?.costMicros);
-        return `Keyword "${kwText}" in Ad Group "${agName}" \u2014 ${clicks} clicks, $${spend.toFixed(0)} spend, 0 conversions`;
-      });
-    if (zeroConv.length > 5) zcItems.push(`\u2026and ${zeroConv.length - 5} more`);
+    // Group by ad group, track worst keyword as example
+    const agMap = new Map<string, { name: string; sample: string; totalClicks: number; totalSpend: number; count: number }>();
+    for (const k of zeroConv) {
+      const agId = String(k.adGroup?.id ?? "unk");
+      const agName = k.adGroup?.name ?? k.campaign?.name ?? "Unknown";
+      const clicks = Number(k.metrics?.clicks ?? 0);
+      const spend = microsToValue(k.metrics?.costMicros);
+      if (!agMap.has(agId)) agMap.set(agId, { name: agName, sample: k.adGroupCriterion?.keyword?.text ?? "?", totalClicks: 0, totalSpend: 0, count: 0 });
+      const g = agMap.get(agId)!;
+      g.totalClicks += clicks; g.totalSpend += spend; g.count++;
+      if (clicks > Number(zeroConv.find((z: any) => (z.adGroupCriterion?.keyword?.text ?? "") === g.sample)?.metrics?.clicks ?? 0)) g.sample = k.adGroupCriterion?.keyword?.text ?? "?";
+    }
+    const zcItems = [...agMap.values()]
+      .sort((a, b) => b.totalSpend - a.totalSpend)
+      .map(g => `Ad Group "${g.name}" — e.g. keyword "${g.sample}", ${g.totalClicks} clicks, $${g.totalSpend.toFixed(0)} spend, 0 conversions (${g.count} keywords)`);
     if (zeroConv.length <= 3) return { result: "warning", details: entityDetails(zcItems), recommendation: "Review and pause or restructure these underperforming keywords" };
     return { result: "fail", details: entityDetails(zcItems), recommendation: "Pause keywords with high clicks and zero conversions immediately, then review targeting and landing pages" };
   }),
@@ -990,9 +997,15 @@ const keywordChecks: CheckFn[] = [
     const lowQS = scored.filter((k: any) => k.adGroupCriterion.qualityInfo.qualityScore <= 3);
     const pct = safeDiv(lowQS.length, scored.length) * 100;
     if (pct < 10) return { result: "pass", details: `Only ${pct.toFixed(0)}% of keywords have QS ≤3`, recommendation: "" };
-    const lowItems = lowQS
-      .sort((a: any, b: any) => microsToValue(b.metrics?.costMicros) - microsToValue(a.metrics?.costMicros))
-      .map((k: any) => `Keyword "${k.adGroupCriterion?.keyword?.text ?? '?'}" in Ad Group "${k.adGroup?.name ?? 'Unknown'}" — QS ${k.adGroupCriterion.qualityInfo.qualityScore}`);
+    // Group low-QS keywords by ad group
+    const agMap = new Map<string, { name: string; sample: string; sampleQS: number; count: number }>();
+    for (const k of lowQS.sort((a: any, b: any) => microsToValue(b.metrics?.costMicros) - microsToValue(a.metrics?.costMicros))) {
+      const agId = String(k.adGroup?.id ?? "unk");
+      const agName = k.adGroup?.name ?? "Unknown";
+      if (!agMap.has(agId)) agMap.set(agId, { name: agName, sample: k.adGroupCriterion?.keyword?.text ?? "?", sampleQS: k.adGroupCriterion.qualityInfo.qualityScore, count: 0 });
+      agMap.get(agId)!.count++;
+    }
+    const lowItems = [...agMap.values()].map(g => `Ad Group "${g.name}" — e.g. keyword "${g.sample}" QS ${g.sampleQS} (${g.count} low-QS keywords)`);
     if (pct < 25) return { result: "warning", details: entityDetails(lowItems), recommendation: "Improve ad copy and landing pages for keywords with QS ≤3" };
     return { result: "fail", details: entityDetails(lowItems), recommendation: "Pause or fix keywords with QS ≤3 — they drastically increase CPC. Rewrite ads and improve landing page relevance" };
   }),
@@ -1042,7 +1055,19 @@ const keywordChecks: CheckFn[] = [
     const top20 = sorted.slice(0, Math.min(20, sorted.length));
     const lowQS = top20.filter((k: any) => k.adGroupCriterion.qualityInfo.qualityScore < 7);
     if (lowQS.length === 0) return { result: "pass", details: `All top ${top20.length} spending keywords have QS ≥7`, recommendation: "" };
-    const lowItems = lowQS.map((k: any) => `Keyword "${k.adGroupCriterion?.keyword?.text ?? '?'}" in Ad Group "${k.adGroup?.name ?? 'Unknown'}" — QS ${k.adGroupCriterion.qualityInfo.qualityScore}, $${microsToValue(k.metrics?.costMicros).toFixed(0)} spend`);
+    // Group by ad group
+    const agMap = new Map<string, { name: string; sample: string; sampleQS: number; totalSpend: number; count: number }>();
+    for (const k of lowQS) {
+      const agId = String(k.adGroup?.id ?? "unk");
+      const agName = k.adGroup?.name ?? "Unknown";
+      const spend = microsToValue(k.metrics?.costMicros);
+      if (!agMap.has(agId)) agMap.set(agId, { name: agName, sample: k.adGroupCriterion?.keyword?.text ?? "?", sampleQS: k.adGroupCriterion.qualityInfo.qualityScore, totalSpend: 0, count: 0 });
+      const g = agMap.get(agId)!;
+      g.totalSpend += spend; g.count++;
+    }
+    const lowItems = [...agMap.values()]
+      .sort((a, b) => b.totalSpend - a.totalSpend)
+      .map(g => `Ad Group "${g.name}" — e.g. keyword "${g.sample}" QS ${g.sampleQS}, $${g.totalSpend.toFixed(0)} spend (${g.count} keywords below QS 7)`);
     if (lowQS.length <= 5) return { result: "warning", details: entityDetails(lowItems), recommendation: "Focus optimization on your highest-spend keywords — improving QS from 5→7 can reduce CPC by 20%+" };
     return { result: "fail", details: entityDetails(lowItems), recommendation: "Prioritize QS improvement for top keywords: rewrite ads, improve landing pages, tighten ad group themes" };
   }),
@@ -1055,7 +1080,15 @@ const keywordChecks: CheckFn[] = [
     const zeroImp = active.filter((k: any) => Number(k.metrics?.impressions ?? 0) === 0);
     const pct = safeDiv(zeroImp.length, active.length) * 100;
     if (pct < 5) return { result: "pass", details: `Only ${pct.toFixed(0)}% of active keywords have zero impressions`, recommendation: "" };
-    const zeroItems = zeroImp.map((k: any) => `Keyword "${k.adGroupCriterion?.keyword?.text ?? '?'}" in Ad Group "${k.adGroup?.name ?? 'Unknown'}" — zero impressions`);
+    // Group by ad group
+    const agMap = new Map<string, { name: string; sample: string; count: number }>();
+    for (const k of zeroImp) {
+      const agId = String(k.adGroup?.id ?? "unk");
+      const agName = k.adGroup?.name ?? "Unknown";
+      if (!agMap.has(agId)) agMap.set(agId, { name: agName, sample: k.adGroupCriterion?.keyword?.text ?? "?", count: 0 });
+      agMap.get(agId)!.count++;
+    }
+    const zeroItems = [...agMap.values()].map(g => `Ad Group "${g.name}" — e.g. keyword "${g.sample}", zero impressions (${g.count} keywords)`);
     if (pct < 10) return { result: "warning", details: entityDetails(zeroItems), recommendation: "Review and pause keywords with zero impressions — they may have low search volume or be outcompeted" };
     return { result: "fail", details: entityDetails(zeroItems), recommendation: "Pause zero-impression keywords to reduce account complexity and focus budget on performing terms" };
   }),
