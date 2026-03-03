@@ -801,59 +801,82 @@ export default function AuditReportPage() {
                           </table>
                         </div>
 
-                        {/* AI Category Narrative */}
-                        {catAnalysis && (
-                          <div className="border-t border-border-light px-5 py-5">
-                            {catAnalysis.criticalFindings.length > 0 && (
-                              <div className="mb-4">
-                                <h4 className="mb-2 text-small font-bold text-signal">
-                                  Critical Findings
-                                </h4>
-                                <ul className="space-y-1">
-                                  {catAnalysis.criticalFindings.map((f, i) => (
-                                    <li
-                                      key={i}
-                                      className="flex items-start gap-2 text-small text-text-primary"
-                                    >
-                                      <XCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-signal" />
-                                      {f}
-                                    </li>
-                                  ))}
-                                </ul>
-                              </div>
-                            )}
+                        {/* Category Analysis: AI narrative or derived from checks */}
+                        {(() => {
+                          const failedChecks = sorted.filter((c) => c.result === "fail");
+                          const warnChecks = sorted.filter((c) => c.result === "warning");
+                          const issueChecks = [...failedChecks, ...warnChecks];
+                          const derivedFindings = issueChecks.map((c) => `[${c.checkId}] ${c.description}: ${c.details ?? (c.result === "fail" ? "Failed" : "Needs attention")}`);
+                          const derivedActions = issueChecks.filter((c) => c.recommendation).map((c) => c.recommendation!);
+                          const derivedNarrative =
+                            catFail > 0
+                              ? `${cat.key} has ${catFail} failed check${catFail !== 1 ? "s" : ""} and ${catWarn} warning${catWarn !== 1 ? "s" : ""} out of ${catChecks.length} total. ${failedChecks.map((c) => c.description).join(", ")}. Address the failed checks above to improve this category's score.`
+                              : catWarn > 0
+                                ? `${cat.key} passed ${catPass} of ${catChecks.length} checks with ${catWarn} warning${catWarn !== 1 ? "s" : ""} requiring attention: ${warnChecks.map((c) => c.description).join(", ")}. Review and resolve these warnings to strengthen this category.`
+                                : `${cat.key} is in excellent shape — all ${catChecks.length} checks passed.`;
 
-                            {catAnalysis.actionItems.length > 0 && (
-                              <div className="mb-4">
-                                <h4 className="mb-2 text-small font-bold text-brand">
-                                  Action Items
-                                </h4>
-                                <ul className="space-y-1">
-                                  {catAnalysis.actionItems.map((item, i) => (
-                                    <li
-                                      key={i}
-                                      className="flex items-start gap-2 text-small text-text-primary"
-                                    >
-                                      <ChevronRight className="mt-0.5 h-3.5 w-3.5 shrink-0 text-brand" />
-                                      {item}
-                                    </li>
-                                  ))}
-                                </ul>
-                              </div>
-                            )}
+                          const findings = (catAnalysis?.criticalFindings?.length ?? 0) > 0 ? catAnalysis!.criticalFindings : derivedFindings;
+                          const actions = (catAnalysis?.actionItems?.length ?? 0) > 0 ? catAnalysis!.actionItems : derivedActions;
+                          const narrative = catAnalysis?.narrative || derivedNarrative;
+                          const hasAiFindings = (catAnalysis?.criticalFindings?.length ?? 0) > 0;
 
-                            {catAnalysis.narrative && (
-                              <div className="rounded-md bg-brand-wash/30 p-4">
-                                <p className="text-caption font-bold uppercase tracking-wider text-text-placeholder">
-                                  Analysis
-                                </p>
-                                <p className="mt-2 whitespace-pre-line text-small leading-relaxed text-text-secondary">
-                                  {catAnalysis.narrative}
-                                </p>
-                              </div>
-                            )}
-                          </div>
-                        )}
+                          return (findings.length > 0 || actions.length > 0 || narrative) ? (
+                            <div className="border-t border-border-light px-5 py-5">
+                              {findings.length > 0 && (
+                                <div className="mb-4">
+                                  <h4 className={`mb-2 text-small font-bold ${hasAiFindings || catFail > 0 ? "text-signal" : "text-harvest"}`}>
+                                    {hasAiFindings ? "Critical Findings" : catFail > 0 ? "Critical Findings" : "Key Findings"}
+                                  </h4>
+                                  <ul className="space-y-1">
+                                    {findings.map((f, i) => (
+                                      <li
+                                        key={i}
+                                        className="flex items-start gap-2 text-small text-text-primary"
+                                      >
+                                        {hasAiFindings || catFail > 0 ? (
+                                          <XCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-signal" />
+                                        ) : (
+                                          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-harvest" />
+                                        )}
+                                        {f}
+                                      </li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              )}
+
+                              {actions.length > 0 && (
+                                <div className="mb-4">
+                                  <h4 className="mb-2 text-small font-bold text-brand">
+                                    Action Items
+                                  </h4>
+                                  <ul className="space-y-1">
+                                    {actions.map((item, i) => (
+                                      <li
+                                        key={i}
+                                        className="flex items-start gap-2 text-small text-text-primary"
+                                      >
+                                        <ChevronRight className="mt-0.5 h-3.5 w-3.5 shrink-0 text-brand" />
+                                        {item}
+                                      </li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              )}
+
+                              {narrative && (
+                                <div className="rounded-md bg-brand-wash/30 p-4">
+                                  <p className="text-caption font-bold uppercase tracking-wider text-text-placeholder">
+                                    Analysis
+                                  </p>
+                                  <p className="mt-2 whitespace-pre-line text-small leading-relaxed text-text-secondary">
+                                    {narrative}
+                                  </p>
+                                </div>
+                              )}
+                            </div>
+                          ) : null;
+                        })()}
                       </div>
                     )}
                   </div>
@@ -1011,59 +1034,82 @@ export default function AuditReportPage() {
                             </table>
                           </div>
 
-                          {/* AI Category Narrative */}
-                          {catAnalysis && (
-                            <div className="border-t border-border-light px-5 py-5">
-                              {catAnalysis.criticalFindings.length > 0 && (
-                                <div className="mb-4">
-                                  <h4 className="mb-2 text-small font-bold text-signal">
-                                    Critical Findings
-                                  </h4>
-                                  <ul className="space-y-1">
-                                    {catAnalysis.criticalFindings.map((f, i) => (
-                                      <li
-                                        key={i}
-                                        className="flex items-start gap-2 text-small text-text-primary"
-                                      >
-                                        <XCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-signal" />
-                                        {f}
-                                      </li>
-                                    ))}
-                                  </ul>
-                                </div>
-                              )}
+                          {/* Category Analysis: AI narrative or derived from checks */}
+                          {(() => {
+                            const failedChecks = sorted.filter((c) => c.result === "fail");
+                            const warnChecks = sorted.filter((c) => c.result === "warning");
+                            const issueChecks = [...failedChecks, ...warnChecks];
+                            const derivedFindings = issueChecks.map((c) => `[${c.checkId}] ${c.description}: ${c.details ?? (c.result === "fail" ? "Failed" : "Needs attention")}`);
+                            const derivedActions = issueChecks.filter((c) => c.recommendation).map((c) => c.recommendation!);
+                            const derivedNarrative =
+                              catFail > 0
+                                ? `${cat} has ${catFail} failed check${catFail !== 1 ? "s" : ""} and ${catWarn} warning${catWarn !== 1 ? "s" : ""} out of ${catChecks.length} total. ${failedChecks.map((c) => c.description).join(", ")}. Address the failed checks above to improve this category's score.`
+                                : catWarn > 0
+                                  ? `${cat} passed ${catPass} of ${catChecks.length} checks with ${catWarn} warning${catWarn !== 1 ? "s" : ""} requiring attention: ${warnChecks.map((c) => c.description).join(", ")}. Review and resolve these warnings to strengthen this category.`
+                                  : `${cat} is in excellent shape — all ${catChecks.length} checks passed.`;
 
-                              {catAnalysis.actionItems.length > 0 && (
-                                <div className="mb-4">
-                                  <h4 className="mb-2 text-small font-bold text-brand">
-                                    Action Items
-                                  </h4>
-                                  <ul className="space-y-1">
-                                    {catAnalysis.actionItems.map((item, i) => (
-                                      <li
-                                        key={i}
-                                        className="flex items-start gap-2 text-small text-text-primary"
-                                      >
-                                        <ChevronRight className="mt-0.5 h-3.5 w-3.5 shrink-0 text-brand" />
-                                        {item}
-                                      </li>
-                                    ))}
-                                  </ul>
-                                </div>
-                              )}
+                            const findings = (catAnalysis?.criticalFindings?.length ?? 0) > 0 ? catAnalysis!.criticalFindings : derivedFindings;
+                            const actions = (catAnalysis?.actionItems?.length ?? 0) > 0 ? catAnalysis!.actionItems : derivedActions;
+                            const narrative = catAnalysis?.narrative || derivedNarrative;
+                            const hasAiFindings = (catAnalysis?.criticalFindings?.length ?? 0) > 0;
 
-                              {catAnalysis.narrative && (
-                                <div className="rounded-md bg-brand-wash/30 p-4">
-                                  <p className="text-caption font-bold uppercase tracking-wider text-text-placeholder">
-                                    Analysis
-                                  </p>
-                                  <p className="mt-2 whitespace-pre-line text-small leading-relaxed text-text-secondary">
-                                    {catAnalysis.narrative}
-                                  </p>
-                                </div>
-                              )}
-                            </div>
-                          )}
+                            return (findings.length > 0 || actions.length > 0 || narrative) ? (
+                              <div className="border-t border-border-light px-5 py-5">
+                                {findings.length > 0 && (
+                                  <div className="mb-4">
+                                    <h4 className={`mb-2 text-small font-bold ${hasAiFindings || catFail > 0 ? "text-signal" : "text-harvest"}`}>
+                                      {hasAiFindings ? "Critical Findings" : catFail > 0 ? "Critical Findings" : "Key Findings"}
+                                    </h4>
+                                    <ul className="space-y-1">
+                                      {findings.map((f, i) => (
+                                        <li
+                                          key={i}
+                                          className="flex items-start gap-2 text-small text-text-primary"
+                                        >
+                                          {hasAiFindings || catFail > 0 ? (
+                                            <XCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-signal" />
+                                          ) : (
+                                            <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-harvest" />
+                                          )}
+                                          {f}
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  </div>
+                                )}
+
+                                {actions.length > 0 && (
+                                  <div className="mb-4">
+                                    <h4 className="mb-2 text-small font-bold text-brand">
+                                      Action Items
+                                    </h4>
+                                    <ul className="space-y-1">
+                                      {actions.map((item, i) => (
+                                        <li
+                                          key={i}
+                                          className="flex items-start gap-2 text-small text-text-primary"
+                                        >
+                                          <ChevronRight className="mt-0.5 h-3.5 w-3.5 shrink-0 text-brand" />
+                                          {item}
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  </div>
+                                )}
+
+                                {narrative && (
+                                  <div className="rounded-md bg-brand-wash/30 p-4">
+                                    <p className="text-caption font-bold uppercase tracking-wider text-text-placeholder">
+                                      Analysis
+                                    </p>
+                                    <p className="mt-2 whitespace-pre-line text-small leading-relaxed text-text-secondary">
+                                      {narrative}
+                                    </p>
+                                  </div>
+                                )}
+                              </div>
+                            ) : null;
+                          })()}
                         </div>
                       )}
                     </div>
