@@ -547,12 +547,67 @@ const structureChecks: CheckFn[] = [
     const campaigns = d.campaigns ?? [];
     const search = campaigns.filter((c: any) => c.campaign?.advertisingChannelType === "SEARCH");
     if (search.length === 0) return { result: "skipped", details: "No search campaigns", recommendation: "" };
+
+    // Build brand tokens from account descriptive name
+    const accountName = (d.account?.[0]?.customer?.descriptiveName ?? "").toLowerCase();
+    const brandTokens = accountName
+      .replace(/[^a-z0-9\s]/g, "")
+      .split(/\s+/)
+      .filter((t: string) => t.length >= 3);
+
+    // Method 1: Campaign name matching (existing heuristic)
     const names = search.map((c: any) => (c.campaign?.name ?? "").toLowerCase());
-    const hasBrand = names.some((n: string) => /brand/.test(n));
-    const hasNonBrand = names.some((n: string) => /non.?brand|generic|prospect/.test(n));
-    if (hasBrand && hasNonBrand) return { result: "pass", details: "Brand and non-brand campaigns are separated", recommendation: "" };
+    const hasBrandName = names.some((n: string) => /brand/.test(n));
+    const hasNonBrandName = names.some((n: string) => /non.?brand|generic|prospect/.test(n));
+
+    // Method 2: Keyword-level brand detection
+    const keywords = d.keywords ?? [];
+    const searchCampaignIds = new Set(search.map((c: any) => String(c.campaign?.id)));
+    const searchKeywords = keywords.filter((k: any) => searchCampaignIds.has(String(k.campaign?.id)));
+
+    // Classify each campaign by whether its keywords contain brand terms
+    const campaignBrandStatus = new Map<string, { name: string; brandKws: number; totalKws: number }>();
+    for (const kw of searchKeywords) {
+      const cId = String(kw.campaign?.id);
+      const cName = (kw.campaign?.name ?? "").toLowerCase();
+      const kwText = (kw.adGroupCriterion?.keyword?.text ?? "").toLowerCase();
+      if (!campaignBrandStatus.has(cId)) {
+        campaignBrandStatus.set(cId, { name: cName, brandKws: 0, totalKws: 0 });
+      }
+      const entry = campaignBrandStatus.get(cId)!;
+      entry.totalKws++;
+      // A keyword is "brand" if it contains any significant token from the business name
+      if (brandTokens.length > 0 && brandTokens.some((t: string) => kwText.includes(t))) {
+        entry.brandKws++;
+      }
+    }
+
+    // A campaign is "brand" if >50% of its keywords contain brand terms
+    const brandCampaigns: string[] = [];
+    const nonBrandCampaigns: string[] = [];
+    for (const [, info] of campaignBrandStatus) {
+      if (info.totalKws === 0) continue;
+      if (info.brandKws / info.totalKws > 0.5) {
+        brandCampaigns.push(info.name);
+      } else {
+        nonBrandCampaigns.push(info.name);
+      }
+    }
+
+    const hasBrandKw = brandCampaigns.length > 0;
+    const hasNonBrandKw = nonBrandCampaigns.length > 0;
+
+    // Combine both methods — either name-based or keyword-based detection counts
+    const brandDetected = hasBrandName || hasBrandKw;
+    const nonBrandDetected = hasNonBrandName || hasNonBrandKw;
+
+    if (brandDetected && nonBrandDetected) {
+      const method = hasBrandKw ? "keyword analysis" : "campaign naming";
+      return { result: "pass", details: `Brand and non-brand campaigns are separated (detected via ${method})`, recommendation: "" };
+    }
     if (search.length === 1) return { result: "warning", details: "Only 1 search campaign — brand/non-brand may be mixed", recommendation: "Separate brand and non-brand into dedicated campaigns for better budget control" };
-    return { result: "fail", details: "No clear brand vs non-brand campaign separation", recommendation: "Create separate brand and non-brand campaigns — brand terms typically have 10x higher CTR and lower CPC" };
+    if (brandTokens.length === 0) return { result: "warning", details: "Unable to derive brand terms from account name — verify brand/non-brand separation manually", recommendation: "Create separate brand and non-brand campaigns — brand terms typically have 10x higher CTR and lower CPC" };
+    return { result: "fail", details: `No brand vs non-brand separation detected. Searched keywords for brand terms: ${brandTokens.join(", ")}`, recommendation: "Create separate brand and non-brand campaigns — brand terms typically have 10x higher CTR and lower CPC" };
   }),
 
   // FL01 — Practice area campaign segmentation (family law)
@@ -598,8 +653,22 @@ const structureChecks: CheckFn[] = [
     const search = campaigns.filter((c: any) => c.campaign?.advertisingChannelType === "SEARCH");
     const pmax = campaigns.filter((c: any) => c.campaign?.advertisingChannelType === "PERFORMANCE_MAX");
     if (pmax.length === 0 || search.length === 0) return { result: "skipped", details: "Not running both Search and PMax", recommendation: "" };
-    const brandSearch = search.some((c: any) => /brand/i.test(c.campaign?.name ?? ""));
-    if (!brandSearch) return { result: "pass", details: "No brand Search campaign — no overlap concern", recommendation: "" };
+
+    // Check campaign names for brand indicators
+    const brandSearchByName = search.some((c: any) => /brand/i.test(c.campaign?.name ?? ""));
+
+    // Check keyword-level: derive brand tokens from account name and scan Search keywords
+    const accountName = (d.account?.[0]?.customer?.descriptiveName ?? "").toLowerCase();
+    const brandTokens = accountName.replace(/[^a-z0-9\s]/g, "").split(/\s+/).filter((t: string) => t.length >= 3);
+    const keywords = d.keywords ?? [];
+    const searchCampaignIds = new Set(search.map((c: any) => String(c.campaign?.id)));
+    const brandKeywordsInSearch = brandTokens.length > 0 && keywords.some((k: any) =>
+      searchCampaignIds.has(String(k.campaign?.id)) &&
+      brandTokens.some((t: string) => (k.adGroupCriterion?.keyword?.text ?? "").toLowerCase().includes(t))
+    );
+
+    const hasBrandSearch = brandSearchByName || brandKeywordsInSearch;
+    if (!hasBrandSearch) return { result: "pass", details: "No brand Search campaign detected — no overlap concern with PMax", recommendation: "" };
     // Cannot directly verify PMax brand exclusions via API
     return { result: "warning", details: "Both brand Search and PMax active — verify brand exclusions in PMax", recommendation: "Configure brand exclusions in PMax when running a separate brand Search campaign to prevent cannibalization" };
   }),
@@ -1040,8 +1109,23 @@ const adsChecks: CheckFn[] = [
   check("G-PM3", "Ads & Assets", "PMax brand cannibalization controlled", "high", 10, (d) => {
     const campaigns = d.campaigns ?? [];
     const pmax = campaigns.filter((c: any) => c.campaign?.advertisingChannelType === "PERFORMANCE_MAX");
-    const brandSearch = campaigns.filter((c: any) => c.campaign?.advertisingChannelType === "SEARCH" && /brand/i.test(c.campaign?.name ?? ""));
-    if (pmax.length === 0 || brandSearch.length === 0) return { result: "skipped", details: "Not running both PMax and brand Search", recommendation: "" };
+    const search = campaigns.filter((c: any) => c.campaign?.advertisingChannelType === "SEARCH");
+    if (pmax.length === 0 || search.length === 0) return { result: "skipped", details: "Not running both PMax and brand Search", recommendation: "" };
+
+    // Name-based brand detection
+    const brandSearchByName = search.some((c: any) => /brand/i.test(c.campaign?.name ?? ""));
+
+    // Keyword-level brand detection
+    const accountName = (d.account?.[0]?.customer?.descriptiveName ?? "").toLowerCase();
+    const brandTokens = accountName.replace(/[^a-z0-9\s]/g, "").split(/\s+/).filter((t: string) => t.length >= 3);
+    const keywords = d.keywords ?? [];
+    const searchIds = new Set(search.map((c: any) => String(c.campaign?.id)));
+    const brandKwInSearch = brandTokens.length > 0 && keywords.some((k: any) =>
+      searchIds.has(String(k.campaign?.id)) &&
+      brandTokens.some((t: string) => (k.adGroupCriterion?.keyword?.text ?? "").toLowerCase().includes(t))
+    );
+
+    if (!brandSearchByName && !brandKwInSearch) return { result: "skipped", details: "No brand Search campaigns detected", recommendation: "" };
     return { result: "warning", details: "PMax may be cannibalizing brand Search — verify brand exclusions", recommendation: "Add brand exclusions in PMax settings and monitor brand vs non-brand conversion split" };
   }),
 

@@ -200,6 +200,7 @@ export class GoogleAdsService {
         ad_group_criterion.status,
         ad_group.id,
         campaign.id,
+        campaign.name,
         campaign.bidding_strategy_type,
         metrics.impressions,
         metrics.clicks,
