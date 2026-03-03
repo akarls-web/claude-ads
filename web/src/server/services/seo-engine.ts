@@ -1,10 +1,19 @@
 /**
- * SterlingX SEO Audit Engine
+ * SterlingX SEO Audit Engine — Multi-Page Site Crawler
  *
  * Ported from claude-seo (https://github.com/AgriciDaniel/claude-seo)
  * into the SterlingX multi-audit platform.
  *
- * 7 categories, ~65 automated checks:
+ * Crawl protocol:
+ *   1. Fetch homepage
+ *   2. Extract internal links from <header>, <nav>, <footer> (primary nav pages)
+ *   3. Extract all internal links on the homepage
+ *   4. Fetch each nav/footer page and extract their internal links
+ *   5. Deduplicate all discovered URLs, cap at MAX_PAGES
+ *   6. Run 65+ checks on each page individually
+ *   7. Aggregate into site-level report with page-by-page drill-down
+ *
+ * 7 categories, ~65 automated checks per page:
  *   • Technical SEO     (25%) — robots.txt, sitemap, HTTPS, security headers, AI crawlers
  *   • Content Quality   (25%) — E-E-A-T signals, word count, freshness, internal links
  *   • On-Page SEO       (20%) — title, meta description, headings, canonical, OG/Twitter
@@ -25,6 +34,78 @@ import type {
 
 // Re-use the shared types from the Google Ads engine
 export type { AuditCheckResult, AuditReport };
+
+// ─── Multi-Page Site Report Types ────────────────────────
+
+/** Per-page results with all checks and scores */
+export interface PageReport {
+  url: string;
+  label: string;           // e.g. "Homepage", "About Us", "/contact"
+  source: "homepage" | "header" | "footer" | "nav" | "internal-link";
+  score: number;
+  grade: Grade;
+  totalChecks: number;
+  passCount: number;
+  warningCount: number;
+  failCount: number;
+  skippedCount: number;
+  manualCount: number;
+  checks: AuditCheckResult[];
+  categoryScores: Record<string, number>;
+  fetchStatus: number;
+  responseTimeMs: number;
+  error?: string;
+}
+
+/** Site-wide opportunity — aggregated from cross-page issues */
+export interface SiteOpportunity {
+  category: string;
+  description: string;
+  severity: Severity;
+  affectedPages: string[];   // URLs
+  affectedPageCount: number;
+  recommendation: string;
+  isQuickWin: boolean;
+  estimatedFixMinutes: number;
+}
+
+/** Full site-level SEO report */
+export interface SeoSiteReport {
+  /** Site-level aggregate score (weighted average of page scores) */
+  score: number;
+  grade: Grade;
+  /** Total pages crawled */
+  pagesCrawled: number;
+  /** Total checks across all pages */
+  totalChecks: number;
+  passCount: number;
+  warningCount: number;
+  failCount: number;
+  skippedCount: number;
+  manualCount: number;
+  /** Site-wide category scores (aggregated from all pages) */
+  categoryScores: Record<string, number>;
+  /** Biggest opportunities per technical section */
+  topOpportunities: SiteOpportunity[];
+  /** Quick wins (high-impact + low-effort fixes across the site) */
+  quickWins: SiteOpportunity[];
+  /** Action plan items prioritized by impact */
+  actionPlan: string[];
+  /** Per-page drill-down */
+  pages: PageReport[];
+  /** Site-level summary text */
+  summary: string;
+  /** Flat list of all checks (for backward compat with AuditReport) */
+  checks: AuditCheckResult[];
+  /** Quick win checks (backward compat) */
+  quickWinChecks: AuditCheckResult[];
+}
+
+/** Max pages to crawl per audit (avoids runaway on huge sites) */
+const MAX_PAGES = 30;
+
+/** Concurrency for page fetching */
+const FETCH_CONCURRENCY = 5;
 
 // ─── Scoring Constants ───────────────────────────────────
 
@@ -296,6 +377,178 @@ function parsePage(html: string, pageUrl: string): ParsedPage {
     lang,
     securityHeaders: {},
   };
+}
+
+// ─── Nav / Footer Link Extractor ─────────────────────────
+
+interface DiscoveredLink {
+  url: string;
+  text: string;
+  source: "header" | "footer" | "nav" | "internal-link";
+}
+
+/**
+ * Extract internal links from header, nav, and footer elements.
+ * These are treated as "primary navigation pages" and crawled first.
+ */
+function extractNavLinks(html: string, pageUrl: string): DiscoveredLink[] {
+  const $ = cheerio.load(html);
+  const baseHost = safeHostname(pageUrl);
+  const origin = new URL(pageUrl).origin;
+  const links: DiscoveredLink[] = [];
+  const seen = new Set<string>();
+
+  const addLink = (
+    el: any, // cheerio element
+    source: "header" | "footer" | "nav"
+  ) => {
+    const $el = $(el);
+    const href = $el.attr("href") ?? "";
+    if (!href || href.startsWith("#") || href.startsWith("javascript:") || href.startsWith("mailto:") || href.startsWith("tel:"))
+      return;
+    try {
+      const resolved = new URL(href, pageUrl).href;
+      const linkHost = safeHostname(resolved);
+      // Only same-domain internal links
+      if (linkHost !== baseHost) return;
+      // Normalize: strip trailing slash, hash, query for dedup
+      const normalized = normalizeUrl(resolved);
+      if (seen.has(normalized)) return;
+      seen.add(normalized);
+      links.push({
+        url: resolved,
+        text: $el.text().trim().slice(0, 80) || pathLabel(resolved, origin),
+        source,
+      });
+    } catch {
+      // malformed URL — skip
+    }
+  };
+
+  // Header links (includes nested nav inside header)
+  $("header a[href]").each((_, el) => addLink(el, "header"));
+
+  // Standalone nav (not inside header/footer)
+  $("nav").each((_, navEl) => {
+    const $nav = $(navEl);
+    // Skip if this nav is inside a header or footer (already captured)
+    if ($nav.closest("header").length > 0 || $nav.closest("footer").length > 0) return;
+    $nav.find("a[href]").each((_, el) => addLink(el, "nav"));
+  });
+
+  // Footer links
+  $("footer a[href]").each((_, el) => addLink(el, "footer"));
+
+  return links;
+}
+
+/**
+ * Extract ALL internal links from a page (for general crawling).
+ */
+function extractInternalLinks(
+  html: string,
+  pageUrl: string
+): DiscoveredLink[] {
+  const $ = cheerio.load(html);
+  const baseHost = safeHostname(pageUrl);
+  const origin = new URL(pageUrl).origin;
+  const links: DiscoveredLink[] = [];
+  const seen = new Set<string>();
+
+  $("a[href]").each((_, el) => {
+    const $el = $(el);
+    const href = $el.attr("href") ?? "";
+    if (!href || href.startsWith("#") || href.startsWith("javascript:") || href.startsWith("mailto:") || href.startsWith("tel:"))
+      return;
+    try {
+      const resolved = new URL(href, pageUrl).href;
+      const linkHost = safeHostname(resolved);
+      if (linkHost !== baseHost) return;
+      const normalized = normalizeUrl(resolved);
+      if (seen.has(normalized)) return;
+      seen.add(normalized);
+      links.push({
+        url: resolved,
+        text: $el.text().trim().slice(0, 80) || pathLabel(resolved, origin),
+        source: "internal-link",
+      });
+    } catch {
+      // skip
+    }
+  });
+
+  return links;
+}
+
+/** Normalize URL for dedup: strip hash, trailing slash, lowercase host */
+function normalizeUrl(rawUrl: string): string {
+  try {
+    const u = new URL(rawUrl);
+    u.hash = "";
+    // Remove trailing slash on path (except root)
+    if (u.pathname.length > 1 && u.pathname.endsWith("/")) {
+      u.pathname = u.pathname.slice(0, -1);
+    }
+    return u.href.toLowerCase();
+  } catch {
+    return rawUrl.toLowerCase();
+  }
+}
+
+/** Generate a human-readable label from a URL path */
+function pathLabel(url: string, origin: string): string {
+  try {
+    const path = new URL(url).pathname;
+    if (path === "/" || path === "") return "Homepage";
+    // "/about-us/" → "About Us"
+    return path
+      .replace(/^\/|\/$/g, "")
+      .split("/")
+      .pop()!
+      .replace(/[-_]/g, " ")
+      .replace(/\b\w/g, (c) => c.toUpperCase());
+  } catch {
+    return url.replace(origin, "") || "/";
+  }
+}
+
+/**
+ * Fetch multiple pages with concurrency limit.
+ */
+async function fetchPagesBatch(
+  urls: string[],
+  concurrency: number = FETCH_CONCURRENCY
+): Promise<Map<string, FetchedPage>> {
+  const results = new Map<string, FetchedPage>();
+  const queue = [...urls];
+
+  async function worker() {
+    while (queue.length > 0) {
+      const url = queue.shift()!;
+      try {
+        const page = await fetchPage(url, 15_000);
+        results.set(normalizeUrl(url), page);
+      } catch {
+        results.set(normalizeUrl(url), {
+          url,
+          finalUrl: url,
+          status: 0,
+          html: "",
+          headers: {},
+          redirectChain: [],
+          responseTimeMs: 0,
+          error: "Fetch failed",
+        });
+      }
+    }
+  }
+
+  const workers = Array.from(
+    { length: Math.min(concurrency, queue.length) },
+    () => worker()
+  );
+  await Promise.all(workers);
+  return results;
 }
 
 // ─── Helpers ─────────────────────────────────────────────
@@ -1956,78 +2209,536 @@ export interface SeoAuditInput {
   websiteUrl: string;
 }
 
+/**
+ * Multi-page SEO site audit.
+ *
+ * Crawl protocol:
+ *   1. Fetch homepage → extract header/nav/footer links + all internal links
+ *   2. Fetch header/footer/nav pages → extract their internal links
+ *   3. Deduplicate, cap at MAX_PAGES
+ *   4. Run all 7-category checks on every page
+ *   5. Aggregate into SeoSiteReport (site score + page drill-downs)
+ *
+ * Returns an AuditReport (backward compat) with the SeoSiteReport
+ * stored in the report structure.
+ */
 export async function runSeoAudit(
   input: SeoAuditInput
-): Promise<AuditReport> {
+): Promise<AuditReport & { siteReport: SeoSiteReport }> {
   // 1. Normalize URL
   let url = input.websiteUrl.trim();
   if (!url.startsWith("http://") && !url.startsWith("https://")) {
     url = `https://${url}`;
   }
 
+  const baseOrigin = new URL(url).origin;
+  const baseHost = safeHostname(url);
+
   // 2. Fetch the homepage
-  const fetched = await fetchPage(url);
-  if (fetched.error && !fetched.html) {
-    // Total failure — return a minimal report
-    return failedReport(
-      `Could not fetch ${url}: ${fetched.error}`
-    );
+  console.log("[SEO] Fetching homepage:", url);
+  const homeFetched = await fetchPage(url);
+  if (homeFetched.error && !homeFetched.html) {
+    const fr = failedReport(`Could not fetch ${url}: ${homeFetched.error}`);
+    return { ...fr, siteReport: failedSiteReport(fr.summary) };
   }
 
-  // 3. Parse HTML
-  const page = parsePage(fetched.html, fetched.finalUrl);
-  page.securityHeaders = {
-    "strict-transport-security":
-      fetched.headers["strict-transport-security"] ?? null,
-    "content-security-policy":
-      fetched.headers["content-security-policy"] ?? null,
-    "x-content-type-options":
-      fetched.headers["x-content-type-options"] ?? null,
-    "x-frame-options": fetched.headers["x-frame-options"] ?? null,
-    "referrer-policy": fetched.headers["referrer-policy"] ?? null,
-  };
-
-  // 4. Fetch robots.txt
-  const baseUrl = new URL(fetched.finalUrl).origin;
-  const robotsResult = await fetchText(`${baseUrl}/robots.txt`);
+  // 3. Fetch robots.txt + sitemap.xml (site-wide, only once)
+  const robotsResult = await fetchText(`${baseOrigin}/robots.txt`);
   const robots: RobotsTxtData | null =
     robotsResult.status === 200 && robotsResult.text.length > 0
       ? parseRobotsTxt(robotsResult.text)
       : null;
 
-  // 5. Fetch sitemap.xml
-  const sitemapUrl =
-    robots?.sitemapUrls[0] ?? `${baseUrl}/sitemap.xml`;
+  const sitemapUrl = robots?.sitemapUrls[0] ?? `${baseOrigin}/sitemap.xml`;
   const sitemapResult = await fetchText(sitemapUrl);
   const sitemapIsValid =
-    sitemapResult.status === 200 &&
-    sitemapResult.text.includes("<urlset") ||
+    (sitemapResult.status === 200 &&
+      sitemapResult.text.includes("<urlset")) ||
     sitemapResult.text.includes("<sitemapindex");
-  const sitemapUrlCount = (
-    sitemapResult.text.match(/<loc>/g) ?? []
-  ).length;
+  const sitemapUrlCount = (sitemapResult.text.match(/<loc>/g) ?? []).length;
   const sitemapStatus = {
     exists: sitemapResult.status === 200 && sitemapIsValid,
     urlCount: sitemapUrlCount,
     isValid: sitemapIsValid,
   };
 
-  // 6. Run all check categories
-  const allChecks: AuditCheckResult[] = [
-    ...runTechnicalChecks(page, fetched, robots, sitemapStatus),
-    ...runContentChecks(page, fetched.html),
-    ...runOnPageChecks(page, fetched.finalUrl),
-    ...runSchemaChecks(page),
-    ...runPerformanceChecks(page, fetched.html, fetched),
-    ...runImageChecks(page),
-    ...runAIReadinessChecks(page, fetched.html, robots, fetched.finalUrl),
-  ];
+  // 4. Discover pages from homepage
+  const navLinks = extractNavLinks(homeFetched.html, homeFetched.finalUrl);
+  const homeInternalLinks = extractInternalLinks(
+    homeFetched.html,
+    homeFetched.finalUrl
+  );
 
-  // 7. Score
-  return scoreReport(allChecks);
+  console.log(
+    `[SEO] Homepage discovered: ${navLinks.length} nav/footer links, ${homeInternalLinks.length} internal links`
+  );
+
+  // Build ordered URL queue: nav/footer first, then homepage internal links
+  const urlQueue = new Map<string, DiscoveredLink>();
+  const homeNorm = normalizeUrl(homeFetched.finalUrl);
+
+  // Homepage is always first — added manually
+  urlQueue.set(homeNorm, {
+    url: homeFetched.finalUrl,
+    text: "Homepage",
+    source: "homepage" as DiscoveredLink["source"],
+  });
+
+  // Nav/footer pages (priority)
+  for (const link of navLinks) {
+    const norm = normalizeUrl(link.url);
+    if (norm === homeNorm) continue;
+    if (!urlQueue.has(norm) && urlQueue.size < MAX_PAGES) {
+      urlQueue.set(norm, link);
+    }
+  }
+
+  // Homepage internal links (fill remaining slots)
+  for (const link of homeInternalLinks) {
+    const norm = normalizeUrl(link.url);
+    if (urlQueue.has(norm)) continue;
+    if (urlQueue.size >= MAX_PAGES) break;
+    urlQueue.set(norm, link);
+  }
+
+  // 5. Fetch nav/footer pages to discover their internal links
+  const navUrls = navLinks
+    .map((l) => l.url)
+    .filter((u) => normalizeUrl(u) !== homeNorm);
+
+  let navFetched = new Map<string, FetchedPage>();
+  if (navUrls.length > 0) {
+    console.log(`[SEO] Fetching ${navUrls.length} nav/footer pages...`);
+    navFetched = await fetchPagesBatch(navUrls);
+  }
+
+  // Extract internal links from nav/footer pages
+  for (const [, fetchedNav] of navFetched) {
+    if (fetchedNav.error || !fetchedNav.html) continue;
+    const subLinks = extractInternalLinks(fetchedNav.html, fetchedNav.finalUrl);
+    for (const link of subLinks) {
+      const norm = normalizeUrl(link.url);
+      if (urlQueue.has(norm)) continue;
+      if (urlQueue.size >= MAX_PAGES) break;
+      urlQueue.set(norm, { ...link, source: "internal-link" });
+    }
+  }
+
+  console.log(`[SEO] Total pages to audit: ${urlQueue.size}`);
+
+  // 6. Fetch remaining pages not yet fetched
+  const alreadyFetched = new Map<string, FetchedPage>();
+  alreadyFetched.set(homeNorm, homeFetched);
+  for (const [norm, fp] of navFetched) {
+    alreadyFetched.set(norm, fp);
+  }
+
+  const toFetch = [...urlQueue.entries()]
+    .filter(([norm]) => !alreadyFetched.has(norm))
+    .map(([, link]) => link.url);
+
+  if (toFetch.length > 0) {
+    console.log(`[SEO] Fetching ${toFetch.length} additional pages...`);
+    const additionalPages = await fetchPagesBatch(toFetch);
+    for (const [norm, fp] of additionalPages) {
+      alreadyFetched.set(norm, fp);
+    }
+  }
+
+  // 7. Run checks on each page
+  const pageReports: PageReport[] = [];
+  const allSiteChecks: AuditCheckResult[] = [];
+
+  for (const [norm, link] of urlQueue) {
+    const fetched = alreadyFetched.get(norm);
+    if (!fetched || (fetched.error && !fetched.html)) {
+      pageReports.push({
+        url: link.url,
+        label: link.text || pathLabel(link.url, baseOrigin),
+        source: link.source as PageReport["source"],
+        score: 0,
+        grade: "F",
+        totalChecks: 0,
+        passCount: 0,
+        warningCount: 0,
+        failCount: 0,
+        skippedCount: 0,
+        manualCount: 0,
+        checks: [],
+        categoryScores: {},
+        fetchStatus: fetched?.status ?? 0,
+        responseTimeMs: fetched?.responseTimeMs ?? 0,
+        error: fetched?.error ?? "Could not fetch page",
+      });
+      continue;
+    }
+
+    const page = parsePage(fetched.html, fetched.finalUrl);
+    page.securityHeaders = {
+      "strict-transport-security":
+        fetched.headers["strict-transport-security"] ?? null,
+      "content-security-policy":
+        fetched.headers["content-security-policy"] ?? null,
+      "x-content-type-options":
+        fetched.headers["x-content-type-options"] ?? null,
+      "x-frame-options": fetched.headers["x-frame-options"] ?? null,
+      "referrer-policy": fetched.headers["referrer-policy"] ?? null,
+    };
+
+    // Technical checks only run on homepage (site-wide: robots, sitemap, etc.)
+    // Per-page checks run on every page
+    const isHomepage = norm === homeNorm;
+    const pageChecks: AuditCheckResult[] = [];
+
+    if (isHomepage) {
+      // Full check suite on homepage (including technical)
+      pageChecks.push(
+        ...runTechnicalChecks(page, fetched, robots, sitemapStatus),
+      );
+    }
+    // These run on every page
+    pageChecks.push(
+      ...runContentChecks(page, fetched.html),
+      ...runOnPageChecks(page, fetched.finalUrl),
+      ...runSchemaChecks(page),
+      ...runPerformanceChecks(page, fetched.html, fetched),
+      ...runImageChecks(page),
+      ...runAIReadinessChecks(page, fetched.html, robots, fetched.finalUrl),
+    );
+
+    // Prefix each checkId with a page index for uniqueness across pages
+    const pageIdx = pageReports.length;
+    const prefixedChecks = pageChecks.map((c) => ({
+      ...c,
+      checkId: `P${pageIdx}-${c.checkId}`,
+      details: `[${link.text || pathLabel(link.url, baseOrigin)}] ${c.details}`,
+    }));
+
+    // Score this page
+    const pageReport = scorePageReport(
+      pageChecks, // Use originals for scoring (no prefix)
+      link.url,
+      link.text || pathLabel(link.url, baseOrigin),
+      link.source as PageReport["source"],
+      fetched
+    );
+    pageReports.push(pageReport);
+
+    // Add prefixed checks to site-wide flat list
+    allSiteChecks.push(...prefixedChecks);
+  }
+
+  // 8. Aggregate site-level scores
+  const siteReport = aggregateSiteReport(
+    pageReports,
+    allSiteChecks,
+    url
+  );
+
+  // 9. Build backward-compatible AuditReport
+  const auditReport: AuditReport = {
+    score: siteReport.score,
+    grade: siteReport.grade,
+    totalChecks: siteReport.totalChecks,
+    passCount: siteReport.passCount,
+    warningCount: siteReport.warningCount,
+    failCount: siteReport.failCount,
+    skippedCount: siteReport.skippedCount,
+    manualCount: siteReport.manualCount,
+    checks: siteReport.checks,
+    summary: siteReport.summary,
+    quickWins: siteReport.quickWinChecks,
+    categoryScores: siteReport.categoryScores,
+  };
+
+  return { ...auditReport, siteReport };
 }
 
-// ─── Scoring (mirrors audit-engine.ts) ───────────────────
+// ─── Per-Page Scoring ────────────────────────────────────
+
+function scorePageReport(
+  checks: AuditCheckResult[],
+  url: string,
+  label: string,
+  source: PageReport["source"],
+  fetched: FetchedPage
+): PageReport {
+  let passCount = 0, warningCount = 0, failCount = 0, skippedCount = 0, manualCount = 0;
+  for (const c of checks) {
+    switch (c.result) {
+      case "pass": passCount++; break;
+      case "warning": warningCount++; break;
+      case "fail": failCount++; break;
+      case "skipped": skippedCount++; break;
+      case "manual": manualCount++; break;
+    }
+  }
+
+  const categoryScores: Record<string, number> = {};
+  const categoryMaxScores: Record<string, number> = {};
+
+  for (const c of checks) {
+    if (c.result === "manual" || c.result === "skipped") continue;
+    const weight = SEVERITY_MULTIPLIER[c.severity];
+    categoryScores[c.category] = categoryScores[c.category] ?? 0;
+    categoryMaxScores[c.category] = categoryMaxScores[c.category] ?? 0;
+    if (c.result === "pass") {
+      categoryScores[c.category] += weight;
+    } else if (c.result === "warning") {
+      categoryScores[c.category] += weight * 0.5;
+    }
+    categoryMaxScores[c.category] += weight;
+  }
+
+  const normalizedCategories: Record<string, number> = {};
+  for (const cat of Object.keys(categoryScores)) {
+    normalizedCategories[cat] =
+      safeDiv(categoryScores[cat], categoryMaxScores[cat]) * 100;
+  }
+
+  let totalScore = 0, totalWeight = 0;
+  for (const [cat, catScore] of Object.entries(normalizedCategories)) {
+    const w = CATEGORY_WEIGHTS[cat] ?? 0.05;
+    totalScore += catScore * w;
+    totalWeight += w;
+  }
+
+  const score = totalWeight > 0 ? Math.round(safeDiv(totalScore, totalWeight)) : 0;
+  const grade = gradeFromScore(score);
+
+  return {
+    url,
+    label,
+    source,
+    score,
+    grade,
+    totalChecks: checks.length,
+    passCount,
+    warningCount,
+    failCount,
+    skippedCount,
+    manualCount,
+    checks,
+    categoryScores: normalizedCategories,
+    fetchStatus: fetched.status,
+    responseTimeMs: fetched.responseTimeMs,
+  };
+}
+
+// ─── Site-Level Aggregation ──────────────────────────────
+
+function aggregateSiteReport(
+  pages: PageReport[],
+  allChecks: AuditCheckResult[],
+  websiteUrl: string
+): SeoSiteReport {
+  const validPages = pages.filter((p) => !p.error && p.totalChecks > 0);
+
+  // Weighted average site score (homepage counts 2x)
+  let weightedSum = 0;
+  let weightTotal = 0;
+  for (const p of validPages) {
+    const w = p.source === "homepage" ? 2 : 1;
+    weightedSum += p.score * w;
+    weightTotal += w;
+  }
+  const siteScore = weightTotal > 0 ? Math.round(weightedSum / weightTotal) : 0;
+  const siteGrade = gradeFromScore(siteScore);
+
+  // Aggregate counts
+  let totalChecks = 0, passCount = 0, warningCount = 0, failCount = 0, skippedCount = 0, manualCount = 0;
+  for (const p of pages) {
+    totalChecks += p.totalChecks;
+    passCount += p.passCount;
+    warningCount += p.warningCount;
+    failCount += p.failCount;
+    skippedCount += p.skippedCount;
+    manualCount += p.manualCount;
+  }
+
+  // Aggregate category scores (average across pages)
+  const catSums: Record<string, number> = {};
+  const catCounts: Record<string, number> = {};
+  for (const p of validPages) {
+    for (const [cat, score] of Object.entries(p.categoryScores)) {
+      catSums[cat] = (catSums[cat] ?? 0) + score;
+      catCounts[cat] = (catCounts[cat] ?? 0) + 1;
+    }
+  }
+  const categoryScores: Record<string, number> = {};
+  for (const cat of Object.keys(catSums)) {
+    categoryScores[cat] = Math.round(catSums[cat] / catCounts[cat]);
+  }
+
+  // Find top opportunities: failing checks that appear on multiple pages
+  const issueMap = new Map<
+    string,
+    {
+      category: string;
+      description: string;
+      severity: Severity;
+      pages: Set<string>;
+      recommendation: string;
+      isQuickWin: boolean;
+      estimatedFixMinutes: number;
+    }
+  >();
+
+  for (const p of validPages) {
+    for (const c of p.checks) {
+      if (c.result !== "fail" && c.result !== "warning") continue;
+      // Use the original checkId (strip page prefix for grouping)
+      const key = c.checkId;
+      if (!issueMap.has(key)) {
+        issueMap.set(key, {
+          category: c.category,
+          description: c.description,
+          severity: c.severity,
+          pages: new Set(),
+          recommendation: c.recommendation,
+          isQuickWin: c.isQuickWin,
+          estimatedFixMinutes: c.estimatedFixMinutes,
+        });
+      }
+      issueMap.get(key)!.pages.add(p.url);
+    }
+  }
+
+  // Sort by impact: severity * affected pages
+  const opportunities = [...issueMap.entries()]
+    .map(([, v]) => ({
+      category: v.category,
+      description: v.description,
+      severity: v.severity,
+      affectedPages: [...v.pages],
+      affectedPageCount: v.pages.size,
+      recommendation: v.recommendation,
+      isQuickWin: v.isQuickWin,
+      estimatedFixMinutes: v.estimatedFixMinutes,
+    }))
+    .sort(
+      (a, b) =>
+        SEVERITY_MULTIPLIER[b.severity] * b.affectedPageCount -
+        SEVERITY_MULTIPLIER[a.severity] * a.affectedPageCount
+    );
+
+  const topOpportunities = opportunities.slice(0, 15);
+  const quickWins = opportunities
+    .filter((o) => o.isQuickWin)
+    .slice(0, 10);
+
+  // Build action plan
+  const actionPlan = buildActionPlan(
+    topOpportunities,
+    quickWins,
+    categoryScores,
+    pages.length,
+    siteScore
+  );
+
+  // Quick win checks (flat, backward compat)
+  const quickWinChecks = allChecks.filter((c) => c.isQuickWin);
+
+  const summary = generateSiteSummary(
+    websiteUrl,
+    siteScore,
+    siteGrade,
+    pages.length,
+    validPages.length,
+    passCount,
+    warningCount,
+    failCount,
+    manualCount,
+    topOpportunities.length,
+    quickWins.length,
+    totalChecks
+  );
+
+  return {
+    score: siteScore,
+    grade: siteGrade,
+    pagesCrawled: pages.length,
+    totalChecks,
+    passCount,
+    warningCount,
+    failCount,
+    skippedCount,
+    manualCount,
+    categoryScores,
+    topOpportunities,
+    quickWins,
+    actionPlan,
+    pages,
+    summary,
+    checks: allChecks,
+    quickWinChecks,
+  };
+}
+
+// ─── Action Plan Builder ─────────────────────────────────
+
+function buildActionPlan(
+  topOpportunities: SiteOpportunity[],
+  quickWins: SiteOpportunity[],
+  categoryScores: Record<string, number>,
+  totalPages: number,
+  siteScore: number
+): string[] {
+  const plan: string[] = [];
+
+  // Phase 1: Quick wins
+  if (quickWins.length > 0) {
+    plan.push(
+      `PHASE 1 — QUICK WINS (${quickWins.length} items, implement first for immediate impact):`
+    );
+    for (const qw of quickWins.slice(0, 5)) {
+      plan.push(
+        `  • [${qw.severity.toUpperCase()}] ${qw.description} — affects ${qw.affectedPageCount}/${totalPages} pages. ${qw.recommendation} (~${qw.estimatedFixMinutes} min)`
+      );
+    }
+  }
+
+  // Phase 2: Critical/high severity issues
+  const critical = topOpportunities.filter(
+    (o) => o.severity === "critical" && !o.isQuickWin
+  );
+  if (critical.length > 0) {
+    plan.push(
+      `PHASE 2 — CRITICAL FIXES (${critical.length} items, address urgently):`
+    );
+    for (const c of critical.slice(0, 5)) {
+      plan.push(
+        `  • ${c.description} — affects ${c.affectedPageCount}/${totalPages} pages. ${c.recommendation}`
+      );
+    }
+  }
+
+  // Phase 3: Category improvements (weakest categories first)
+  const weakCategories = Object.entries(categoryScores)
+    .filter(([, score]) => score < 70)
+    .sort(([, a], [, b]) => a - b);
+
+  if (weakCategories.length > 0) {
+    plan.push(
+      `PHASE 3 — CATEGORY IMPROVEMENTS (focus on weakest areas):`
+    );
+    for (const [cat, score] of weakCategories.slice(0, 4)) {
+      const catIssues = topOpportunities.filter((o) => o.category === cat);
+      plan.push(
+        `  • ${cat} (${Math.round(score)}/100): ${catIssues.length} opportunities — ${catIssues[0]?.recommendation ?? "Review and optimize"}`
+      );
+    }
+  }
+
+  // Phase 4: Ongoing monitoring
+  plan.push(
+    `PHASE 4 — ONGOING: Re-audit monthly. Current site score: ${siteScore}/100 across ${totalPages} pages.`
+  );
+
+  return plan;
+}
+
+// ─── Scoring (site-level backward compat) ────────────────
 
 function scoreReport(checks: AuditCheckResult[]): AuditReport {
   let passCount = 0;
@@ -2046,7 +2757,6 @@ function scoreReport(checks: AuditCheckResult[]): AuditReport {
     }
   }
 
-  // Category scores
   const categoryScores: Record<string, number> = {};
   const categoryMaxScores: Record<string, number> = {};
 
@@ -2062,19 +2772,16 @@ function scoreReport(checks: AuditCheckResult[]): AuditReport {
     } else if (c.result === "warning") {
       categoryScores[c.category] += weight * 0.5;
     }
-    // fail = 0 contribution
 
     categoryMaxScores[c.category] += weight;
   }
 
-  // Normalize each category to 0-100
   const normalizedCategories: Record<string, number> = {};
   for (const cat of Object.keys(categoryScores)) {
     normalizedCategories[cat] =
       safeDiv(categoryScores[cat], categoryMaxScores[cat]) * 100;
   }
 
-  // Calculate weighted total
   let totalScore = 0;
   let totalWeight = 0;
   for (const [cat, catScore] of Object.entries(normalizedCategories)) {
@@ -2155,6 +2862,42 @@ Quick Wins Available: ${quickWins} high-impact fixes
 This SEO audit covers ${totalChecks} checks across 7 categories: Technical SEO, Content Quality, On-Page SEO, Schema & Structured Data, Performance, Images, and AI Search Readiness. Methodology based on Google Quality Rater Guidelines (Sept 2025), Core Web Vitals (INP, LCP, CLS), and Generative Engine Optimization (GEO) best practices.`;
 }
 
+function generateSiteSummary(
+  websiteUrl: string,
+  score: number,
+  grade: Grade,
+  totalPages: number,
+  validPages: number,
+  pass: number,
+  warn: number,
+  fail: number,
+  manual: number,
+  topOpps: number,
+  quickWins: number,
+  totalChecks: number
+): string {
+  const gradeDescriptions: Record<Grade, string> = {
+    A: "Excellent — minor optimizations only",
+    B: "Good — some improvement opportunities exist",
+    C: "Average — notable issues need attention",
+    D: "Below Average — significant problems present",
+    F: "Critical — urgent intervention required",
+  };
+
+  return `SterlingX SEO Site Audit: ${websiteUrl}
+Site Health Score: ${score}/100 (Grade ${grade})
+
+${gradeDescriptions[grade]}
+
+Pages Crawled: ${totalPages} (${validPages} successfully analyzed)
+Total Checks: ${totalChecks} across all pages
+Results: ${pass} passed, ${warn} warnings, ${fail} failed${manual > 0 ? `, ${manual} manual review` : ""}
+Top Opportunities: ${topOpps} site-wide issues identified
+Quick Wins: ${quickWins} high-impact fixes available
+
+This multi-page SEO audit crawls homepage, header/footer navigation pages, and internal links to provide a comprehensive site health assessment. Each page is scored across 7 categories: Technical SEO, Content Quality, On-Page SEO, Schema & Structured Data, Performance, Images, and AI Search Readiness.`;
+}
+
 function failedReport(message: string): AuditReport {
   return {
     score: 0,
@@ -2169,5 +2912,27 @@ function failedReport(message: string): AuditReport {
     summary: `SEO audit could not be completed. ${message}`,
     quickWins: [],
     categoryScores: {},
+  };
+}
+
+function failedSiteReport(message: string): SeoSiteReport {
+  return {
+    score: 0,
+    grade: "F",
+    pagesCrawled: 0,
+    totalChecks: 0,
+    passCount: 0,
+    warningCount: 0,
+    failCount: 0,
+    skippedCount: 0,
+    manualCount: 0,
+    categoryScores: {},
+    topOpportunities: [],
+    quickWins: [],
+    actionPlan: [],
+    pages: [],
+    summary: `SEO audit could not be completed. ${message}`,
+    checks: [],
+    quickWinChecks: [],
   };
 }

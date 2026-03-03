@@ -24,6 +24,9 @@ import {
   FileText,
   ArrowUp,
   ClipboardList,
+  Globe,
+  Layers,
+  ExternalLink,
 } from "lucide-react";
 import { SterlingXLogo } from "@/components/ui/sterlingx-logo";
 
@@ -66,11 +69,48 @@ interface AuditCheck {
   estimatedFixMinutes: number | null;
 }
 
+/* ── SEO Site Report types from rawData ── */
+interface SeoPageSummary {
+  url: string;
+  label: string;
+  source: string;
+  score: number;
+  grade: string;
+  totalChecks: number;
+  passCount: number;
+  warningCount: number;
+  failCount: number;
+  categoryScores: Record<string, number>;
+  fetchStatus: "ok" | "error";
+  responseTimeMs?: number;
+  error?: string;
+}
+
+interface SeoOpportunity {
+  checkId: string;
+  category: string;
+  description: string;
+  severity: string;
+  affectedPages: number;
+  totalPages: number;
+  recommendation: string;
+}
+
+interface SeoRawData {
+  websiteUrl?: string;
+  pagesCrawled?: number;
+  categoryScores?: Record<string, number>;
+  pages?: SeoPageSummary[];
+  topOpportunities?: SeoOpportunity[];
+  quickWins?: SeoOpportunity[];
+  actionPlan?: { phase: string; items: string[] }[];
+}
+
 /* ────────────────────────────────────────────────────────────
  *  CONSTANTS
  * ──────────────────────────────────────────────────────────── */
 
-const CATEGORIES = [
+const ADS_CATEGORIES = [
   { key: "Conversion Tracking", weight: "25%" },
   { key: "Wasted Spend", weight: "20%" },
   { key: "Account Structure", weight: "15%" },
@@ -82,13 +122,33 @@ const CATEGORIES = [
   { key: "SterlingX Operations", weight: "" },
 ];
 
-const NAV_SECTIONS = [
+const SEO_CATEGORIES = [
+  { key: "Technical SEO", weight: "25%" },
+  { key: "Content Quality", weight: "25%" },
+  { key: "On-Page SEO", weight: "20%" },
+  { key: "Schema & Structured Data", weight: "10%" },
+  { key: "Performance", weight: "10%" },
+  { key: "Images", weight: "5%" },
+  { key: "AI Search Readiness", weight: "5%" },
+];
+
+const ADS_NAV_SECTIONS = [
   { id: "summary", label: "Executive Summary", icon: FileText },
   { id: "categories", label: "Category Scores", icon: BarChart3 },
   { id: "details", label: "Detailed Findings", icon: Target },
   { id: "quickwins", label: "Quick Wins", icon: Zap },
   { id: "actions", label: "Action Plan", icon: TrendingUp },
   { id: "matrix", label: "Summary Matrix", icon: BarChart3 },
+];
+
+const SEO_NAV_SECTIONS = [
+  { id: "summary", label: "Executive Summary", icon: FileText },
+  { id: "site-overview", label: "Site Overview", icon: Globe },
+  { id: "categories", label: "Category Scores", icon: BarChart3 },
+  { id: "opportunities", label: "Top Opportunities", icon: Target },
+  { id: "pages", label: "Page-by-Page", icon: Layers },
+  { id: "quickwins", label: "Quick Wins", icon: Zap },
+  { id: "actions", label: "Action Plan", icon: TrendingUp },
 ];
 
 const severityOrder: Record<string, number> = {
@@ -275,7 +335,13 @@ export default function AuditReportPage() {
   >({});
   const [downloading, setDownloading] = useState(false);
   const [activeSection, setActiveSection] = useState("summary");
+  const [expandedPage, setExpandedPage] = useState<string | null>(null);
   const reportRef = useRef<HTMLDivElement>(null);
+
+  // Determine audit type for rendering
+  const isSeo = audit.data?.audit?.auditType === "seo";
+  const CATEGORIES = isSeo ? SEO_CATEGORIES : ADS_CATEGORIES;
+  const NAV_SECTIONS = isSeo ? SEO_NAV_SECTIONS : ADS_NAV_SECTIONS;
 
   // ── Scroll spy ──
   useEffect(() => {
@@ -369,11 +435,15 @@ export default function AuditReportPage() {
 
   const { audit: a, checks } = audit.data;
   const ai = (a.aiAnalysis as AIAnalysis) ?? {};
+  const raw = (a.rawData ?? {}) as SeoRawData & Record<string, unknown>;
   const categoryScores: Record<string, number> =
-    ((a.rawData as Record<string, unknown>)?.categoryScores as Record<
-      string,
-      number
-    >) ?? {};
+    (raw.categoryScores as Record<string, number>) ?? {};
+
+  // SEO site-level data
+  const seoPages: SeoPageSummary[] = isSeo ? (raw.pages ?? []) : [];
+  const seoOpportunities: SeoOpportunity[] = isSeo ? (raw.topOpportunities ?? []) : [];
+  const seoQuickWinOpps: SeoOpportunity[] = isSeo ? (raw.quickWins ?? []) : [];
+  const seoActionPlan = isSeo ? (raw.actionPlan ?? []) : [];
 
   // Group checks by category
   const grouped: Record<string, AuditCheck[]> = {};
@@ -489,7 +559,7 @@ export default function AuditReportPage() {
                   <SterlingXLogo size={28} />
                 </div>
                 <p className="text-caption font-bold uppercase tracking-widest text-brand">
-                  Google Ads Audit Report
+                  {isSeo ? "SEO Site Audit Report" : "Google Ads Audit Report"}
                 </p>
                 <h1 className="mt-2 text-display font-heading font-bold tracking-tight text-text-primary">
                   {a.reportId}
@@ -595,6 +665,71 @@ export default function AuditReportPage() {
           </section>
 
           {/* ════════════════════════════════════════════════════
+           *  SEO: SITE OVERVIEW (pages crawled with scores)
+           * ════════════════════════════════════════════════════ */}
+          {isSeo && seoPages.length > 0 && (
+            <section id="site-overview" className="space-y-6 print:break-before-page">
+              <SectionHeading id="site-overview-heading" icon={Globe}>
+                Site Overview — {seoPages.length} Pages Crawled
+              </SectionHeading>
+
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {seoPages.map((p) => {
+                  const scoreColor =
+                    p.score >= 80 ? "#4AA988" : p.score >= 60 ? "#EEAE22" : p.score >= 40 ? "#F97316" : "#C6385A";
+                  return (
+                    <div
+                      key={p.url}
+                      className={cn(
+                        "rounded-lg border bg-white p-5 transition-shadow hover:shadow-md",
+                        p.fetchStatus === "error" ? "border-red-200 bg-red-50/30" : "border-border-light",
+                      )}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-small font-bold text-text-primary" title={p.url}>
+                            {p.label || new URL(p.url).pathname}
+                          </p>
+                          <p className="mt-0.5 text-caption text-text-placeholder">
+                            {p.source}
+                          </p>
+                        </div>
+                        {p.fetchStatus === "ok" && (
+                          <ScoreRing score={p.score} grade={p.grade} size="sm" />
+                        )}
+                      </div>
+                      {p.fetchStatus === "error" ? (
+                        <p className="mt-3 text-caption text-red-600">{p.error ?? "Failed to fetch"}</p>
+                      ) : (
+                        <div className="mt-3 flex items-center gap-3 border-t border-border-light pt-3">
+                          <span className="flex items-center gap-1 text-caption font-medium text-emerald">
+                            <CheckCircle2 className="h-3.5 w-3.5" /> {p.passCount}
+                          </span>
+                          {p.failCount > 0 && (
+                            <span className="flex items-center gap-1 text-caption font-medium text-signal">
+                              <XCircle className="h-3.5 w-3.5" /> {p.failCount}
+                            </span>
+                          )}
+                          {p.warningCount > 0 && (
+                            <span className="flex items-center gap-1 text-caption font-medium text-harvest">
+                              <AlertTriangle className="h-3.5 w-3.5" /> {p.warningCount}
+                            </span>
+                          )}
+                          {p.responseTimeMs !== undefined && (
+                            <span className="ml-auto text-caption text-text-placeholder">
+                              {p.responseTimeMs}ms
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+          )}
+
+          {/* ════════════════════════════════════════════════════
            *  CATEGORY SCORES
            * ════════════════════════════════════════════════════ */}
           {Object.keys(categoryScores).length > 0 && (
@@ -648,8 +783,249 @@ export default function AuditReportPage() {
           )}
 
           {/* ════════════════════════════════════════════════════
-           *  DETAILED FINDINGS (per category)
+           *  SEO: TOP OPPORTUNITIES (cross-page issues)
            * ════════════════════════════════════════════════════ */}
+          {isSeo && seoOpportunities.length > 0 && (
+            <section id="opportunities" className="space-y-6 print:break-before-page">
+              <SectionHeading id="opportunities-heading" icon={Target}>
+                Top Opportunities
+              </SectionHeading>
+              <p className="text-body text-text-secondary">
+                Issues found across multiple pages — fixing these will have the biggest impact on your site score.
+              </p>
+
+              <div className="space-y-3">
+                {seoOpportunities.map((opp, i) => {
+                  const pct = Math.round((opp.affectedPages / opp.totalPages) * 100);
+                  return (
+                    <div
+                      key={`${opp.checkId}-${i}`}
+                      className="rounded-lg border border-border-light bg-white p-5 transition-shadow hover:shadow-sm"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2 mb-1">
+                            <Badge className={severityClasses[opp.severity ?? "medium"]}>
+                              {opp.severity}
+                            </Badge>
+                            <span className="text-caption text-text-placeholder">{opp.category}</span>
+                          </div>
+                          <p className="text-small font-semibold text-text-primary">
+                            {opp.description}
+                          </p>
+                          {opp.recommendation && (
+                            <p className="mt-1 text-caption text-text-secondary">
+                              💡 {opp.recommendation}
+                            </p>
+                          )}
+                        </div>
+                        <div className="shrink-0 text-right">
+                          <p className="text-h3 font-bold text-signal">{opp.affectedPages}</p>
+                          <p className="text-caption text-text-placeholder">
+                            of {opp.totalPages} pages ({pct}%)
+                          </p>
+                        </div>
+                      </div>
+                      <ProgressBar value={pct} className="mt-3" />
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+          )}
+
+          {/* ════════════════════════════════════════════════════
+           *  SEO: PAGE-BY-PAGE DRILL-DOWN
+           * ════════════════════════════════════════════════════ */}
+          {isSeo && seoPages.length > 0 && (
+            <section id="pages" className="space-y-6 print:break-before-page">
+              <SectionHeading id="pages-heading" icon={Layers}>
+                Page-by-Page Breakdown
+              </SectionHeading>
+              <p className="text-body text-text-secondary">
+                Click any page to see its individual check results and category scores.
+              </p>
+
+              <div className="space-y-3">
+                {seoPages.map((page) => {
+                  const isOpen = expandedPage === page.url;
+                  // Get checks for this page (prefixed with P{index}-)
+                  const pageIndex = seoPages.indexOf(page);
+                  const pagePrefix = `P${pageIndex}-`;
+                  const pageChecks = (checks as AuditCheck[]).filter((c) =>
+                    c.checkId?.startsWith(pagePrefix)
+                  );
+                  const pageGrouped: Record<string, AuditCheck[]> = {};
+                  for (const c of pageChecks) {
+                    const cat = c.category ?? "Other";
+                    if (!pageGrouped[cat]) pageGrouped[cat] = [];
+                    pageGrouped[cat].push(c);
+                  }
+                  const scoreColor =
+                    page.score >= 80 ? "#4AA988" : page.score >= 60 ? "#EEAE22" : page.score >= 40 ? "#F97316" : "#C6385A";
+
+                  return (
+                    <div
+                      key={page.url}
+                      className="overflow-hidden rounded-lg border border-border-light bg-white print:break-inside-avoid"
+                    >
+                      {/* Page header */}
+                      <button
+                        onClick={() => setExpandedPage(isOpen ? null : page.url)}
+                        className="flex w-full items-center justify-between px-5 py-4 text-left transition-colors hover:bg-brand-wash/30"
+                      >
+                        <div className="flex items-center gap-3 min-w-0">
+                          {isOpen ? (
+                            <ChevronDown className="h-5 w-5 text-text-placeholder print:hidden" strokeWidth={1.75} />
+                          ) : (
+                            <ChevronRight className="h-5 w-5 text-text-placeholder print:hidden" strokeWidth={1.75} />
+                          )}
+                          <div className="min-w-0">
+                            <span className="text-body font-bold text-text-primary">
+                              {page.label || new URL(page.url).pathname}
+                            </span>
+                            <span className="ml-2 text-caption text-text-placeholder">
+                              ({page.source})
+                            </span>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-4 shrink-0">
+                          {page.fetchStatus === "ok" ? (
+                            <>
+                              <div className="flex items-center gap-2">
+                                {page.passCount > 0 && (
+                                  <span className="flex items-center gap-1 text-caption font-medium text-emerald">
+                                    <CheckCircle2 className="h-3.5 w-3.5" /> {page.passCount}
+                                  </span>
+                                )}
+                                {page.failCount > 0 && (
+                                  <span className="flex items-center gap-1 text-caption font-medium text-signal">
+                                    <XCircle className="h-3.5 w-3.5" /> {page.failCount}
+                                  </span>
+                                )}
+                                {page.warningCount > 0 && (
+                                  <span className="flex items-center gap-1 text-caption font-medium text-harvest">
+                                    <AlertTriangle className="h-3.5 w-3.5" /> {page.warningCount}
+                                  </span>
+                                )}
+                              </div>
+                              <div className="text-right">
+                                <span className="text-h3 font-bold" style={{ color: scoreColor }}>
+                                  {Math.round(page.score)}
+                                </span>
+                                <span className="text-caption text-text-placeholder">/100</span>
+                              </div>
+                            </>
+                          ) : (
+                            <Badge className="bg-red-100 text-red-800 border-red-200">Error</Badge>
+                          )}
+                        </div>
+                      </button>
+
+                      {/* Expanded: page category scores + checks */}
+                      {isOpen && page.fetchStatus === "ok" && (
+                        <div className="border-t border-border-light">
+                          {/* Page category scores */}
+                          {Object.keys(page.categoryScores).length > 0 && (
+                            <div className="grid grid-cols-2 gap-3 px-5 py-4 sm:grid-cols-4 lg:grid-cols-7 bg-brand-wash/20">
+                              {SEO_CATEGORIES.map((cat) => {
+                                const cs = page.categoryScores[cat.key];
+                                if (cs === undefined) return null;
+                                return (
+                                  <div key={cat.key} className="text-center">
+                                    <p className="text-[10px] font-bold uppercase tracking-wider text-text-placeholder truncate">
+                                      {cat.key}
+                                    </p>
+                                    <p className="text-small font-bold text-text-primary mt-0.5">
+                                      {Math.round(cs)}<span className="text-caption text-text-placeholder">/100</span>
+                                    </p>
+                                    <ProgressBar value={cs} className="mt-1" />
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+
+                          {/* Page checks grouped by category */}
+                          {Object.entries(pageGrouped).map(([cat, catChecks]) => {
+                            const sorted = [...catChecks].sort((a, b) => {
+                              const aFail = a.result === "fail" ? 0 : a.result === "warning" ? 1 : 2;
+                              const bFail = b.result === "fail" ? 0 : b.result === "warning" ? 1 : 2;
+                              if (aFail !== bFail) return aFail - bFail;
+                              return (severityOrder[a.severity ?? "info"] ?? 4) - (severityOrder[b.severity ?? "info"] ?? 4);
+                            });
+                            const failOnly = sorted.filter((c) => c.result === "fail" || c.result === "warning");
+                            const displayChecks = failOnly.length > 0 ? failOnly : sorted.slice(0, 3);
+
+                            return (
+                              <div key={cat} className="border-t border-border-light">
+                                <div className="px-5 py-2 bg-brand/5">
+                                  <span className="text-caption font-bold uppercase tracking-wider text-text-placeholder">{cat}</span>
+                                </div>
+                                <div className="divide-y divide-border-light">
+                                  {displayChecks.map((check) => (
+                                    <div key={check.id} className="flex items-start gap-3 px-5 py-3">
+                                      <div className="min-w-0 flex-1">
+                                        <div className="flex items-center gap-2">
+                                          <span className="font-mono text-caption text-text-placeholder">
+                                            {check.checkId?.replace(pagePrefix, "")}
+                                          </span>
+                                          <Badge className={resultClasses[check.result ?? "info"]}>
+                                            {check.result}
+                                          </Badge>
+                                          <Badge className={severityClasses[check.severity ?? "info"]}>
+                                            {check.severity}
+                                          </Badge>
+                                        </div>
+                                        <p className="mt-0.5 text-small font-medium text-text-primary">
+                                          {check.description}
+                                        </p>
+                                        {check.recommendation && check.result === "fail" && (
+                                          <p className="mt-1 text-caption text-brand">💡 {check.recommendation}</p>
+                                        )}
+                                      </div>
+                                    </div>
+                                  ))}
+                                  {sorted.length > displayChecks.length && (
+                                    <div className="px-5 py-2 text-caption text-text-placeholder">
+                                      + {sorted.length - displayChecks.length} more checks passed
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+
+                          {/* Link to page */}
+                          <div className="border-t border-border-light px-5 py-3">
+                            <a
+                              href={page.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1.5 text-small font-medium text-brand hover:text-brand-light"
+                            >
+                              View Page <ExternalLink className="h-3.5 w-3.5" strokeWidth={1.75} />
+                            </a>
+                          </div>
+                        </div>
+                      )}
+
+                      {isOpen && page.fetchStatus === "error" && (
+                        <div className="border-t border-border-light px-5 py-4">
+                          <p className="text-small text-red-600">{page.error ?? "Failed to fetch this page."}</p>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+          )}
+
+          {/* ════════════════════════════════════════════════════
+           *  DETAILED FINDINGS (per category) — Google Ads only
+           * ════════════════════════════════════════════════════ */}
+          {!isSeo && (
           <section id="details" className="space-y-6 print:break-before-page">
             <SectionHeading id="details-heading" icon={Target}>
               Detailed Findings
@@ -1144,6 +1520,7 @@ export default function AuditReportPage() {
                 })}
             </div>
           </section>
+          )}
 
           {/* ════════════════════════════════════════════════════
            *  QUICK WINS
@@ -1322,8 +1699,50 @@ export default function AuditReportPage() {
           )}
 
           {/* ════════════════════════════════════════════════════
-           *  SUMMARY MATRIX
+           *  SEO: ACTION PLAN (from engine phases)
            * ════════════════════════════════════════════════════ */}
+          {isSeo && seoActionPlan.length > 0 && !ai.priorityActions && (
+            <section id="actions" className="space-y-6 print:break-before-page">
+              <SectionHeading id="actions-heading" icon={TrendingUp}>
+                Action Plan
+              </SectionHeading>
+
+              <div className="space-y-6">
+                {seoActionPlan.map((phase, pi) => {
+                  const phaseColors = [
+                    { border: "border-signal/20", dot: "bg-signal", text: "text-signal", badge: "bg-signal/10 text-signal" },
+                    { border: "border-harvest/20", dot: "bg-harvest", text: "text-harvest", badge: "bg-harvest/10 text-harvest" },
+                    { border: "border-brand/20", dot: "bg-brand", text: "text-brand", badge: "bg-brand/10 text-brand" },
+                    { border: "border-emerald/20", dot: "bg-emerald", text: "text-emerald", badge: "bg-emerald/10 text-emerald" },
+                  ];
+                  const c = phaseColors[pi % phaseColors.length];
+                  return (
+                    <div key={phase.phase} className={cn("rounded-lg border bg-white p-6", c.border)}>
+                      <h3 className={cn("mb-4 flex items-center gap-2 text-h3 font-heading font-semibold", c.text)}>
+                        <div className={cn("h-2 w-2 rounded-full", c.dot)} />
+                        {phase.phase}
+                      </h3>
+                      <ol className="space-y-3">
+                        {phase.items.map((item, i) => (
+                          <li key={i} className="flex items-start gap-3 text-small text-text-primary">
+                            <span className={cn("flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-caption font-bold", c.badge)}>
+                              {i + 1}
+                            </span>
+                            {item}
+                          </li>
+                        ))}
+                      </ol>
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+          )}
+
+          {/* ════════════════════════════════════════════════════
+           *  SUMMARY MATRIX (Google Ads only)
+           * ════════════════════════════════════════════════════ */}
+          {!isSeo && (
           <section id="matrix" className="space-y-6 print:break-before-page">
             <SectionHeading id="matrix-heading" icon={BarChart3}>
               Summary Matrix
@@ -1444,6 +1863,7 @@ export default function AuditReportPage() {
               </table>
             </div>
           </section>
+          )}
 
           {/* ── Footer ── */}
           <footer className="border-t border-border-light pt-8 text-center print:mt-12">

@@ -322,12 +322,14 @@ export const auditRouter = router({
         .returning();
 
       try {
-        // Run SEO engine
-        const report = await runSeoAudit({
+        // Run SEO engine (multi-page site crawl)
+        const result = await runSeoAudit({
           websiteUrl: input.websiteUrl,
         });
+        const report = result;
+        const siteReport = result.siteReport;
 
-        // Save check results
+        // Save check results (all pages, prefixed checkIds)
         const checkInserts = report.checks.map((c) => ({
           auditId: audit.id,
           checkId: c.checkId,
@@ -345,14 +347,36 @@ export const auditRouter = router({
           await db.insert(auditChecks).values(checkInserts);
         }
 
-        // Build lightweight data summary
+        // Build data summary with site report metadata
         const dataSummary = {
           websiteUrl: input.websiteUrl,
           fetchedAt: new Date().toISOString(),
-          categoryScores: report.categoryScores,
+          categoryScores: siteReport.categoryScores,
+          pagesCrawled: siteReport.pagesCrawled,
+          topOpportunities: siteReport.topOpportunities,
+          quickWins: siteReport.quickWins,
+          actionPlan: siteReport.actionPlan,
+          pages: siteReport.pages.map((p) => ({
+            url: p.url,
+            label: p.label,
+            source: p.source,
+            score: p.score,
+            grade: p.grade,
+            totalChecks: p.totalChecks,
+            passCount: p.passCount,
+            warningCount: p.warningCount,
+            failCount: p.failCount,
+            categoryScores: p.categoryScores,
+            fetchStatus: p.fetchStatus,
+            responseTimeMs: p.responseTimeMs,
+            error: p.error,
+          })),
         };
 
-        // Run AI-powered narrative analysis
+        // Run AI-powered narrative analysis (limit checks to top issues for prompt size)
+        const topChecksForAI = report.checks
+          .filter((c) => c.result === "fail" || c.result === "warning" || c.isQuickWin)
+          .slice(0, 60);
         const aiAnalysis = await generateAIAnalysis({
           customerName: input.websiteUrl,
           customerId: input.websiteUrl,
@@ -365,7 +389,7 @@ export const auditRouter = router({
           skippedCount: report.skippedCount,
           manualCount: report.manualCount,
           categoryScores: report.categoryScores,
-          checks: report.checks.map((c) => ({
+          checks: topChecksForAI.map((c) => ({
             checkId: c.checkId,
             category: c.category,
             description: c.description,
@@ -375,7 +399,11 @@ export const auditRouter = router({
             recommendation: c.recommendation,
             isQuickWin: c.isQuickWin,
           })),
-          dataCounts: {},
+          dataCounts: {
+            pagesCrawled: siteReport.pagesCrawled,
+            topOpportunities: siteReport.topOpportunities.length,
+            quickWins: siteReport.quickWins.length,
+          },
         });
 
         // Update audit with results

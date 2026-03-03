@@ -16,9 +16,49 @@ import {
   ChevronRight,
   Download,
   FileText,
+  Globe,
+  Layers,
+  ExternalLink,
 } from "lucide-react";
-import { formatScore, gradeColor, gradeBg } from "@/lib/utils";
+import { formatScore, gradeColor, gradeBg, cn } from "@/lib/utils";
 import { useState, useCallback } from "react";
+
+/* ── SEO Site Report types from rawData ── */
+interface SeoPageSummary {
+  url: string;
+  label: string;
+  source: string;
+  score: number;
+  grade: string;
+  totalChecks: number;
+  passCount: number;
+  warningCount: number;
+  failCount: number;
+  categoryScores: Record<string, number>;
+  fetchStatus: "ok" | "error";
+  responseTimeMs?: number;
+  error?: string;
+}
+
+interface SeoOpportunity {
+  checkId: string;
+  category: string;
+  description: string;
+  severity: string;
+  affectedPages: number;
+  totalPages: number;
+  recommendation: string;
+}
+
+interface SeoRawData {
+  websiteUrl?: string;
+  pagesCrawled?: number;
+  categoryScores?: Record<string, number>;
+  pages?: SeoPageSummary[];
+  topOpportunities?: SeoOpportunity[];
+  quickWins?: SeoOpportunity[];
+  actionPlan?: { phase: string; items: string[] }[];
+}
 
 const severityIcon = {
   critical: <XCircle className="h-4 w-4 text-red-600" strokeWidth={1.75} />,
@@ -105,10 +145,17 @@ export default function AuditDetailPage() {
   }
 
   const { audit: a, checks } = audit.data;
+  const isSeo = a.auditType === "seo";
+  const raw = (a.rawData ?? {}) as SeoRawData & Record<string, unknown>;
 
   // Parse category scores from rawData
   const categoryScores: Record<string, number> =
-    (a.rawData as Record<string, unknown>)?.categoryScores as Record<string, number> ?? {};
+    (raw.categoryScores as Record<string, number>) ?? {};
+
+  // SEO site-level data
+  const seoPages: SeoPageSummary[] = isSeo ? (raw.pages ?? []) : [];
+  const seoOpportunities: SeoOpportunity[] = isSeo ? (raw.topOpportunities ?? []) : [];
+  const seoActionPlan = isSeo ? (raw.actionPlan ?? []) : [];
 
   // Group checks by category
   const grouped = checks.reduce(
@@ -249,6 +296,122 @@ export default function AuditDetailPage() {
                     className="h-1.5 rounded-full bg-brand transition-all"
                     style={{ width: `${Math.min(100, Math.round(score))}%` }}
                   />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── SEO: Pages Crawled ── */}
+      {isSeo && seoPages.length > 0 && (
+        <div>
+          <h2 className="mb-4 flex items-center gap-2 text-h3 font-semibold text-text-primary">
+            <Layers className="h-5 w-5 text-brand" strokeWidth={1.75} />
+            Pages Crawled
+            <span className="rounded-full bg-brand-wash px-2 py-0.5 text-caption font-bold text-brand">
+              {seoPages.length}
+            </span>
+          </h2>
+          <div className="grid gap-3 sm:grid-cols-2">
+            {seoPages.map((p) => {
+              const scoreColor =
+                p.score >= 80 ? "text-green-600" : p.score >= 60 ? "text-yellow-600" : p.score >= 40 ? "text-orange-500" : "text-red-600";
+              return (
+                <div
+                  key={p.url}
+                  className={cn(
+                    "rounded-lg border bg-white p-4 transition-shadow hover:shadow-sm",
+                    p.fetchStatus === "error" ? "border-red-200 bg-red-50/30" : "border-border-light",
+                  )}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-small font-semibold text-text-primary" title={p.url}>
+                        {p.label || p.url}
+                      </p>
+                      <a
+                        href={p.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="mt-0.5 inline-flex items-center gap-1 truncate text-caption text-text-placeholder hover:text-brand"
+                      >
+                        {new URL(p.url).pathname}
+                        <ExternalLink className="h-3 w-3 shrink-0" strokeWidth={1.75} />
+                      </a>
+                    </div>
+                    {p.fetchStatus === "ok" && (
+                      <div className="text-right shrink-0">
+                        <span className={cn("text-h3 font-bold", scoreColor)}>
+                          {Math.round(p.score)}
+                        </span>
+                        <span className="text-caption text-text-placeholder">/100</span>
+                      </div>
+                    )}
+                  </div>
+                  {p.fetchStatus === "error" ? (
+                    <p className="mt-2 text-caption text-red-600">{p.error ?? "Failed to fetch"}</p>
+                  ) : (
+                    <div className="mt-3 flex items-center gap-3">
+                      <span className="flex items-center gap-1 text-caption font-medium text-green-600">
+                        <CheckCircle2 className="h-3.5 w-3.5" /> {p.passCount}
+                      </span>
+                      {p.failCount > 0 && (
+                        <span className="flex items-center gap-1 text-caption font-medium text-red-600">
+                          <XCircle className="h-3.5 w-3.5" /> {p.failCount}
+                        </span>
+                      )}
+                      {p.warningCount > 0 && (
+                        <span className="flex items-center gap-1 text-caption font-medium text-yellow-600">
+                          <AlertTriangle className="h-3.5 w-3.5" /> {p.warningCount}
+                        </span>
+                      )}
+                      <span className="text-caption text-text-placeholder">
+                        · {p.source}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* ── SEO: Top Opportunities ── */}
+      {isSeo && seoOpportunities.length > 0 && (
+        <div>
+          <h2 className="mb-4 flex items-center gap-2 text-h3 font-semibold text-text-primary">
+            <Globe className="h-5 w-5 text-brand" strokeWidth={1.75} />
+            Top Opportunities
+          </h2>
+          <div className="space-y-2">
+            {seoOpportunities.slice(0, 10).map((opp, i) => (
+              <div
+                key={`${opp.checkId}-${i}`}
+                className="rounded-lg border border-border-light bg-white p-4"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-small font-semibold text-text-primary">
+                      {opp.description}
+                    </p>
+                    {opp.recommendation && (
+                      <p className="mt-1 text-caption text-text-secondary">
+                        {opp.recommendation}
+                      </p>
+                    )}
+                  </div>
+                  <div className="shrink-0 text-right">
+                    <span className={cn(
+                      "rounded-full px-2 py-0.5 text-caption font-bold",
+                      opp.severity === "critical" ? "bg-red-50 text-red-700" :
+                      opp.severity === "high" ? "bg-orange-50 text-orange-700" :
+                      "bg-yellow-50 text-yellow-700",
+                    )}>
+                      {opp.affectedPages}/{opp.totalPages} pages
+                    </span>
+                  </div>
                 </div>
               </div>
             ))}

@@ -1,0 +1,1400 @@
+{
+  "report": {
+    "reportId": "SX-ADS-20260303-9186",
+    "auditType": "google_ads",
+    "status": "completed",
+    "score": 68,
+    "grade": "C",
+    "totalChecks": 111,
+    "passCount": 47,
+    "warningCount": 21,
+    "failCount": 22,
+    "skippedCount": 5,
+    "manualCount": 16,
+    "summary": "SterlingX Ads Health Score: 68/100 (Grade C)\n\nAverage — notable issues need attention\n\nResults: 47 passed, 21 warnings, 22 failed (4 CRITICAL), 16 manual review\nQuick Wins Available: 9 high-impact fixes under 15 minutes each\n\nThis audit covers 96 Google Ads platform checks (including family law specialization and lead gen hardening) and 15 SterlingX agency governance checks (111 total). Manual review items are excluded from scoring.",
+    "startedAt": "2026-03-04T02:20:26.306Z",
+    "completedAt": "2026-03-04T02:22:02.940Z",
+    "createdAt": "2026-03-04T02:20:26.408Z"
+  },
+  "connection": {
+    "accountName": "Sterling Law Offices, S.C.",
+    "externalId": "4848705759"
+  },
+  "client": {
+    "name": "Sterling Lawyers",
+    "website": "https://www.sterlinglawyers.com/",
+    "industry": "Family Law"
+  },
+  "rawData": {
+    "counts": {
+      "ads": 43724,
+      "adGroups": 7886,
+      "keywords": 90122,
+      "campaigns": 39,
+      "assetGroups": 5,
+      "conversions": 38,
+      "searchTerms": 0,
+      "changeHistory": 100,
+      "negativeKeywords": 105
+    },
+    "fetchedAt": "2026-03-03T20:20:36.553Z",
+    "categoryScores": {
+      "Ads & Assets": 51.31578947368421,
+      "Wasted Spend": 85.71428571428571,
+      "Account Structure": 53.57142857142857,
+      "Conversion Tracking": 76.61290322580645,
+      "SterlingX Reporting": 100,
+      "Settings & Targeting": 65.65656565656566,
+      "SterlingX Governance": 86.36363636363636,
+      "SterlingX Operations": 100,
+      "Keywords & Quality Score": 32.608695652173914
+    }
+  },
+  "aiAnalysis": {
+    "generatedAt": "2026-03-03T20:22:02.940Z",
+    "estimatedImpact": "Implementing the prioritized recommendations could yield 25-40% improvement in cost-per-acquisition within 60-90 days. The immediate conversion tracking fixes and budget reallocation should provide quick wins in the first 2 weeks. Quality Score improvements typically show 15-25% CPC reduction as scores move from the current 4.5 average toward the 7.0+ target range. The account structure consolidation and ad asset optimization could drive an additional 20-30% improvement in conversion volume by improving automated bidding effectiveness. Conservative estimates suggest potential annual savings of $150,000-$250,000 in wasted spend while increasing qualified lead volume by 30-50%.",
+    "priorityActions": {
+      "nearTerm": [
+        "Restructure 2,551+ ad groups into single-theme groups with ≤15 keywords (G03)",
+        "Add 12-15 headlines to 16,690+ underperforming RSAs (G27)",
+        "Isolate broad match keywords from exact/phrase match types (FL04)",
+        "Fill Performance Max asset slots with 20 images, 5 logos, and video assets (G31)"
+      ],
+      "immediate": [
+        "Fix duplicate conversion counting and switch lead gen conversions to 'Count: One' (G-CT1, CT-FL5)",
+        "Apply negative keyword lists to all campaigns to prevent wasted spend (G15)",
+        "Reallocate budget from underperforming to top-converting campaigns (G08)",
+        "Pause keywords with Quality Score ≤3 to stop cost inflation (G21)"
+      ],
+      "strategic": [
+        "Consolidate 39 campaigns into ≤5 per funnel stage for better AI learning (G04)",
+        "Implement comprehensive landing page optimization focused on legal services (G24, G60)",
+        "Develop geographic campaign segmentation strategy (FL02)",
+        "Create systematic Quality Score improvement process across all keyword themes (G20)"
+      ]
+    },
+    "categoryAnalyses": [
+      {
+        "score": 77,
+        "category": "Conversion Tracking",
+        "headline": "Strong foundation undermined by critical counting errors",
+        "narrative": "The conversion tracking infrastructure demonstrates solid technical implementation with enhanced conversions enabled, server-side tracking active, and GA4 properly linked. However, two critical issues are undermining Smart Bidding performance: duplicate conversion actions are causing double-counting (G-CT1), and lead generation conversions are set to count 'Every' interaction instead of 'One' per user (CT-FL5). These errors inflate conversion metrics and mislead automated bidding systems. Additionally, the account is still using deprecated last-click attribution instead of Google's recommended data-driven attribution model (G48), which limits optimization insights for the machine learning algorithms.",
+        "actionItems": [
+          "Immediately consolidate duplicate conversion actions to prevent double-counting",
+          "Switch all lead generation conversions to 'Count: One' setting",
+          "Migrate all conversion actions to data-driven attribution model"
+        ],
+        "criticalFindings": [
+          "Duplicate conversion action 'sterling law offices, s.c. - ga4 (web) call' causing double-counting (G-CT1)",
+          "Lead gen conversions incorrectly set to 'Every' instead of 'One', inflating metrics (CT-FL5)",
+          "Last-click attribution model active instead of data-driven attribution (G48)"
+        ]
+      },
+      {
+        "score": 54,
+        "category": "Account Structure",
+        "headline": "Fragmented structure starving AI optimization of data",
+        "narrative": "The account structure is severely fragmented with 39 campaigns and over 7,800 ad groups, creating data silos that prevent effective machine learning optimization. Analysis reveals 2,551+ ad groups with mixed keyword themes and low coherence scores, such as mixing 'doctor, chiropractor, chiropractic' terms in single groups (G03). This fragmentation is compounded by inappropriate budget allocation, where top-performing campaigns like 'IL - 847 - T2 - CORE - Arlington' (173 conversions) are budget-constrained while lower performers receive excess budget (G08). The campaign proliferation across 39 unique objectives suggests over-segmentation that's limiting bidding algorithm effectiveness.",
+        "actionItems": [
+          "Consolidate to ≤5 campaigns per funnel stage, grouping by core legal practice areas",
+          "Restructure ad groups into single-theme groups with ≤15 keywords each",
+          "Reallocate budget from low-performing to high-converting campaigns immediately"
+        ],
+        "criticalFindings": [
+          "2,551+ ad groups with mixed themes and poor keyword coherence (G03)",
+          "39 unique campaign objectives creating excessive fragmentation (G04)",
+          "Budget misallocation with top converters budget-constrained (G08)"
+        ]
+      },
+      {
+        "score": 33,
+        "category": "Keywords & Quality Score",
+        "headline": "Critical Quality Score crisis driving up costs",
+        "narrative": "The keyword portfolio faces a Quality Score crisis with a weighted average of 4.5, well below the target threshold of 7.0 (G20). This poor performance is systematically increasing CPCs and reducing ad visibility across the account. The analysis identified 174+ ad groups with keywords scoring ≤3 Quality Score, including high-spend terms that are drastically inflating costs (G21). The primary driver is poor expected CTR, affecting 76% of keywords (G22), indicating fundamental misalignment between ad copy, keywords, and user intent. Additionally, broad match keywords are incorrectly mixed with exact and phrase match types in 323+ ad groups (FL04), causing broad match to cannibalize more precise traffic and further degrading relevance signals.",
+        "actionItems": [
+          "Immediately pause or restructure keywords with QS ≤3 to stop cost inflation",
+          "Isolate broad match keywords from exact/phrase match in separate ad groups",
+          "Rewrite ad copy with keyword-relevant headlines to improve expected CTR"
+        ],
+        "criticalFindings": [
+          "Weighted average Quality Score of 4.5, well below 7.0 target (G20)",
+          "174+ ad groups contain keywords with critical QS ≤3 scores (G21)",
+          "76% of keywords showing 'Below Average' expected CTR component (G22)"
+        ]
+      },
+      {
+        "score": 51,
+        "category": "Ads & Assets",
+        "headline": "Underutilized ad assets limiting performance potential",
+        "narrative": "The ad asset strategy is significantly underperforming with 16,690+ RSAs containing insufficient headlines (G27) and 3,690+ ads showing 'Poor' ad strength ratings (G29). Most RSAs have only 6 headlines when Google recommends 12-15 unique variations for optimal performance. Performance Max campaigns are particularly concerning, with asset groups missing critical components: only 5/20 images, 0/5 logos, and incomplete headline/description sets (G31). This asset scarcity limits Google's ability to test combinations and find winning creative variations. The account also lacks several high-impact extensions including structured snippets, image extensions, and call extensions (G52, G53, G54), which are particularly crucial for legal services where phone calls drive lead conversion.",
+        "actionItems": [
+          "Add 12-15 unique headlines per RSA including keyword variants and compelling CTAs",
+          "Fill all Performance Max asset slots: 20 images, 5 logos, 5+ videos",
+          "Implement structured snippets, image extensions, and call extensions across all campaigns"
+        ],
+        "criticalFindings": [
+          "16,690+ RSAs with insufficient headlines (only 6 vs. recommended 12-15) (G27)",
+          "3,690+ ads showing 'Poor' ad strength, limiting optimization (G29)",
+          "Performance Max asset groups severely under-populated with missing logos and limited creative variety (G31)"
+        ]
+      },
+      {
+        "score": 66,
+        "category": "Settings & Targeting",
+        "headline": "Solid foundation with critical landing page alignment issues",
+        "narrative": "The targeting and settings configuration shows generally sound implementation with proper location targeting, appropriate Smart Bidding deployment, and correct language settings. However, a significant concern emerges in landing page experience, with 28% of keywords reporting below-average scores (G24). The landing page titles reveal a concerning pattern of competitor comparison pages rather than service-focused content, which may be confusing users and reducing conversion rates. Additionally, 37+ campaigns have Search Partners enabled (G09), which should be monitored closely as this placement often delivers lower-quality traffic for legal services. The account appropriately separates brand and non-brand campaigns but lacks geographic segmentation (FL02), which could improve local relevance for legal services.",
+        "actionItems": [
+          "Audit and optimize landing pages to focus on legal services rather than competitor comparisons",
+          "Monitor Search Partners performance and disable if cost-per-conversion is >20% higher than Search",
+          "Implement geographic campaign segmentation for improved local relevance"
+        ],
+        "criticalFindings": [
+          "28% of keywords showing below-average landing page experience (G24)",
+          "Landing pages focused on competitor comparisons rather than services (G60)",
+          "Search Partners enabled across 37+ campaigns requiring performance monitoring (G12)"
+        ]
+      },
+      {
+        "score": 86,
+        "category": "Wasted Spend",
+        "headline": "Strong negative keyword foundation with coverage gaps",
+        "narrative": "The account demonstrates strong fundamentals in wasted spend prevention with comprehensive negative keyword lists and recent search term auditing. However, a critical gap exists in negative keyword coverage, with lists applied to only 18% of campaigns (G15), potentially allowing irrelevant traffic across the majority of the account. The analysis found 7,875+ zero-impression keywords that should be paused to reduce account complexity (G-KW1). Positively, the account shows no evidence of broad match paired with manual bidding or high-spend zero-conversion keywords, indicating sound foundational controls are in place.",
+        "actionItems": [
+          "Apply existing negative keyword lists to all remaining campaigns immediately",
+          "Pause zero-impression keywords to focus budget on performing terms",
+          "Expand negative lists with competitor terms, job seekers, and DIY legal queries"
+        ],
+        "criticalFindings": [
+          "Negative keyword lists only applied to 18% of campaigns, leaving gaps in coverage (G15)",
+          "7,875+ zero-impression keywords adding unnecessary account complexity (G-KW1)"
+        ]
+      }
+    ],
+    "executiveSummary": "Sterling Law Offices' Google Ads account scored 68/100 (Grade C), indicating significant optimization opportunities that could materially impact lead generation performance. The analysis reveals fundamental conversion tracking issues, including duplicate conversion counting (G-CT1) and incorrect lead generation settings (CT-FL5), which are undermining Smart Bidding accuracy. Most critically, the account suffers from severe Quality Score degradation with a weighted average of 4.5 (target: ≥7), resulting in inflated CPCs and reduced ad visibility. With 39 fragmented campaigns and over 7,800 ad groups containing mixed keyword themes, the account structure is preventing Google's AI systems from effectively learning and optimizing. The account shows strong foundations in conversion setup and tracking infrastructure but requires immediate attention to structure, Quality Score, and budget allocation to maximize the substantial ad spend investment.",
+    "overallAssessment": "The C-grade reflects an account with solid technical foundations but critical performance blockers. While conversion tracking infrastructure is largely intact (77/100), the combination of poor account structure (54/100), severely degraded Quality Scores (33/100), and suboptimal ad assets (51/100) is creating a compounding negative effect on campaign efficiency and lead quality.",
+    "wastedSpendInsights": "The analysis reveals moderate wasted spend risk primarily from Quality Score degradation and structural inefficiencies. With 174+ ad groups containing keywords with QS ≤3, the account is paying significantly inflated CPCs across high-volume terms. The 76% of keywords showing below-average expected CTR suggests systematic relevance issues that compound cost inflation. Additionally, the gap in negative keyword coverage (only 18% of campaigns protected) and 7,875+ zero-impression keywords represent budget allocation inefficiencies, though these appear less severe than the Quality Score impact."
+  },
+  "checks": [
+    {
+      "checkId": "FL01",
+      "category": "Account Structure",
+      "description": "Campaigns segmented by practice area",
+      "result": "warning",
+      "severity": "high",
+      "details": "Only 1 practice area detected in campaign names: divorce",
+      "recommendation": "Segment campaigns by practice area — e.g., separate Divorce, Child Custody, and Family Law into individual campaigns for better budget control and ad relevance",
+      "isQuickWin": false,
+      "estimatedFixMinutes": 30
+    },
+    {
+      "checkId": "FL02",
+      "category": "Account Structure",
+      "description": "Campaigns segmented by location",
+      "result": "warning",
+      "severity": "medium",
+      "details": "No geographic campaign segmentation detected",
+      "recommendation": "For multi-location firms, segment campaigns by geography to control budgets and ad copy per location",
+      "isQuickWin": false,
+      "estimatedFixMinutes": 30
+    },
+    {
+      "checkId": "FL03",
+      "category": "Account Structure",
+      "description": "No research/buyer intent mix in ad groups",
+      "result": "pass",
+      "severity": "high",
+      "details": "No ad groups mixing research and buyer intent keywords",
+      "recommendation": "",
+      "isQuickWin": false,
+      "estimatedFixMinutes": 20
+    },
+    {
+      "checkId": "FL04",
+      "category": "Account Structure",
+      "description": "Broad match keywords isolated",
+      "result": "fail",
+      "severity": "high",
+      "details": "Ad Group \"(+) Att1 - Vande Castle\" — broad match mixed with phrase/exact match keywords\nAd Group \"(+) Att1 - Richter & Phillips\" — broad match mixed with phrase/exact match keywords\nAd Group \"(+) Att1 - Cordell & Cordell Madison\" — broad match mixed with phrase/exact match keywords\n…and 323 more",
+      "recommendation": "Isolate broad match keywords into their own ad groups or campaigns. Mixing match types causes broad match to cannibalize exact/phrase match traffic",
+      "isQuickWin": true,
+      "estimatedFixMinutes": 15
+    },
+    {
+      "checkId": "G01",
+      "category": "Account Structure",
+      "description": "Campaign naming convention",
+      "result": "pass",
+      "severity": "medium",
+      "details": "100% of campaigns follow naming convention",
+      "recommendation": "",
+      "isQuickWin": false,
+      "estimatedFixMinutes": 15
+    },
+    {
+      "checkId": "G02",
+      "category": "Account Structure",
+      "description": "Ad group naming convention",
+      "result": "pass",
+      "severity": "medium",
+      "details": "100% of ad groups follow naming convention",
+      "recommendation": "",
+      "isQuickWin": false,
+      "estimatedFixMinutes": 15
+    },
+    {
+      "checkId": "G03",
+      "category": "Account Structure",
+      "description": "Single theme ad groups (≤15 keywords)",
+      "result": "fail",
+      "severity": "high",
+      "details": "Ad Group \"(+) Att1 - Vande Castle\" — mixed themes (20% coherence): doctor, chiropractor, chiropractic\nAd Group \"(+) Att1 - Richter & Phillips\" — mixed themes (40% coherence): richter, phillips, llp\nAd Group \"(+) Att1 - Austin Miller\" — 30 keywords (exceeds 15 max); mixed themes (23% coherence): miller, austin, john\n…and 2551 more",
+      "recommendation": "Restructure ad groups into single-theme groups with ≤15 keywords. Group keywords by core topic — e.g., 'divorce', 'child custody', 'child support' should be separate ad groups for better ad relevance and Quality Score",
+      "isQuickWin": false,
+      "estimatedFixMinutes": 20
+    },
+    {
+      "checkId": "G04",
+      "category": "Account Structure",
+      "description": "Campaign count per objective appropriate",
+      "result": "fail",
+      "severity": "high",
+      "details": "39 unique campaign objectives — likely fragmented",
+      "recommendation": "Consolidate to ≤5 campaigns per funnel stage/objective. Fragmentation starves AI-powered bidding of data",
+      "isQuickWin": false,
+      "estimatedFixMinutes": 30
+    },
+    {
+      "checkId": "G05",
+      "category": "Account Structure",
+      "description": "Brand vs non-brand separation",
+      "result": "pass",
+      "severity": "critical",
+      "details": "Brand and non-brand campaigns are separated (detected via keyword analysis)",
+      "recommendation": "",
+      "isQuickWin": false,
+      "estimatedFixMinutes": 10
+    },
+    {
+      "checkId": "G06",
+      "category": "Account Structure",
+      "description": "Non-search campaign types flagged",
+      "result": "warning",
+      "severity": "high",
+      "details": "Campaign \"WI - PMax - Divorce - 414 - MKE\" — PERFORMANCE_MAX (non-Search)",
+      "recommendation": "For family law lead gen, Search campaigns are primary. Flag Performance Max, Display, Demand Gen, and YouTube for review — they often drive lower-quality leads",
+      "isQuickWin": false,
+      "estimatedFixMinutes": 10
+    },
+    {
+      "checkId": "G07",
+      "category": "Account Structure",
+      "description": "Search + PMax brand overlap managed",
+      "result": "warning",
+      "severity": "high",
+      "details": "Both brand Search and PMax active — verify brand exclusions in PMax",
+      "recommendation": "Configure brand exclusions in PMax when running a separate brand Search campaign to prevent cannibalization",
+      "isQuickWin": false,
+      "estimatedFixMinutes": 15
+    },
+    {
+      "checkId": "G08",
+      "category": "Account Structure",
+      "description": "Budget allocation matches priority",
+      "result": "fail",
+      "severity": "high",
+      "details": "Campaign \"IL - 847 - T2 - CORE - Arlington\" — budget $290/day, spending $8407 (173 conversions)\nCampaign \"WI - Geo - T2\" — budget $125/day, spending $4147 (165 conversions)\nCampaign \"IL - 847 - T1 - CORE - Arlington\" — budget $258/day, spending $7508 (153 conversions)\n…and 9 more",
+      "recommendation": "Reallocate budget from lower-performing campaigns to top performers that are budget-constrained",
+      "isQuickWin": true,
+      "estimatedFixMinutes": 15
+    },
+    {
+      "checkId": "G09",
+      "category": "Account Structure",
+      "description": "Campaign budget not capped prematurely",
+      "result": "warning",
+      "severity": "medium",
+      "details": "Campaign \"WI - Competitor\" — at 3317% of $32/day budget\nCampaign \"WI - Brand\" — at 3345% of $55/day budget\nCampaign \"IL - Brand\" — at 3303% of $26/day budget\n…and 36 more",
+      "recommendation": "Increase budget for capped campaigns or consolidate to ensure ads show throughout the day",
+      "isQuickWin": false,
+      "estimatedFixMinutes": 10
+    },
+    {
+      "checkId": "G10",
+      "category": "Account Structure",
+      "description": "Ad schedule configured (if applicable)",
+      "result": "pass",
+      "severity": "low",
+      "details": "39/39 campaigns have ad schedules configured",
+      "recommendation": "",
+      "isQuickWin": false,
+      "estimatedFixMinutes": 10
+    },
+    {
+      "checkId": "G11",
+      "category": "Account Structure",
+      "description": "Location targeting uses 'Presence'",
+      "result": "pass",
+      "severity": "high",
+      "details": "Location targeting set to 'Presence' — users in your locations",
+      "recommendation": "",
+      "isQuickWin": false,
+      "estimatedFixMinutes": 2
+    },
+    {
+      "checkId": "G12",
+      "category": "Account Structure",
+      "description": "Network settings appropriate",
+      "result": "warning",
+      "severity": "high",
+      "details": "Campaign \"WI - Competitor\" — Search Partners enabled (monitor performance)\nCampaign \"IL - Brand\" — Search Partners enabled (monitor performance)\nCampaign \"WI - Geo - T1\" — Search Partners enabled (monitor performance)\n…and 34 more",
+      "recommendation": "Compare Search Partners vs Google Search performance — disable partners if CPA is >50% higher",
+      "isQuickWin": false,
+      "estimatedFixMinutes": 2
+    },
+    {
+      "checkId": "G-AD1",
+      "category": "Ads & Assets",
+      "description": "Ad copy tested within last 90 days",
+      "result": "warning",
+      "severity": "medium",
+      "details": "No recent ad copy changes detected — ads may be stale",
+      "recommendation": "Test new ad copy at least every 90 days to combat ad fatigue and maintain CTR",
+      "isQuickWin": false,
+      "estimatedFixMinutes": 15
+    },
+    {
+      "checkId": "G-AD2",
+      "category": "Ads & Assets",
+      "description": "CTR at or above legal industry average",
+      "result": "pass",
+      "severity": "high",
+      "details": "Account CTR: 10.66% — above legal industry average (5-7%)",
+      "recommendation": "",
+      "isQuickWin": false,
+      "estimatedFixMinutes": 20
+    },
+    {
+      "checkId": "G-PM1",
+      "category": "Ads & Assets",
+      "description": "PMax audience signals configured",
+      "result": "warning",
+      "severity": "high",
+      "details": "No PMax audience signals detected",
+      "recommendation": "Add custom audience signals per asset group: custom segments, interests, remarketing lists",
+      "isQuickWin": false,
+      "estimatedFixMinutes": 15
+    },
+    {
+      "checkId": "G-PM2",
+      "category": "Ads & Assets",
+      "description": "PMax asset group ad strength Good+",
+      "result": "fail",
+      "severity": "high",
+      "details": "Asset Group \"Divorce\" — AVERAGE ad strength\nAsset Group \"Divorce - A/B Test (YT Vids) | Prospecting + 40% HHI\" — AVERAGE ad strength\nAsset Group \"Divorce - A/B Test (Lifestyle Images) | Prospecting + 40% HHI\" — AVERAGE ad strength\n…and 2 more",
+      "recommendation": "Urgently improve PMax assets: add more images, videos, headlines, and descriptions to maximize coverage",
+      "isQuickWin": false,
+      "estimatedFixMinutes": 20
+    },
+    {
+      "checkId": "G-PM3",
+      "category": "Ads & Assets",
+      "description": "PMax brand cannibalization controlled",
+      "result": "warning",
+      "severity": "high",
+      "details": "PMax may be cannibalizing brand Search — verify brand exclusions",
+      "recommendation": "Add brand exclusions in PMax settings and monitor brand vs non-brand conversion split",
+      "isQuickWin": false,
+      "estimatedFixMinutes": 10
+    },
+    {
+      "checkId": "G-PM4",
+      "category": "Ads & Assets",
+      "description": "PMax search themes configured",
+      "result": "manual",
+      "severity": "medium",
+      "details": "PMax search theme configuration requires manual verification",
+      "recommendation": "Configure up to 50 search themes per asset group to guide Google's AI on your target queries",
+      "isQuickWin": false,
+      "estimatedFixMinutes": 10
+    },
+    {
+      "checkId": "G-PM5",
+      "category": "Ads & Assets",
+      "description": "PMax negative keywords applied",
+      "result": "pass",
+      "severity": "high",
+      "details": "81 negative keywords applied to PMax campaigns",
+      "recommendation": "",
+      "isQuickWin": false,
+      "estimatedFixMinutes": 10
+    },
+    {
+      "checkId": "G26",
+      "category": "Ads & Assets",
+      "description": "RSA present in every ad group",
+      "result": "pass",
+      "severity": "high",
+      "details": "100% of ad groups have RSAs",
+      "recommendation": "",
+      "isQuickWin": false,
+      "estimatedFixMinutes": 15
+    },
+    {
+      "checkId": "G27",
+      "category": "Ads & Assets",
+      "description": "RSA headline count (≥8 unique)",
+      "result": "fail",
+      "severity": "high",
+      "details": "RSA in Ad Group \"(+) Att1 - Hoff Claringbole & Quigley (Formerly Hoff & Panzer)\" — 6 headlines (need ≥8)\nRSA in Ad Group \"(+) Att1 - Hoff Claringbole & Quigley (Formerly Hoff & Panzer)\" — 6 headlines (need ≥8)\nRSA in Ad Group \"(+) Att1 - Herrling Clark\" — 6 headlines (need ≥8)\n…and 16690 more",
+      "recommendation": "Add 12-15 unique headlines per RSA. Include keyword variants, benefits, CTAs, and social proof",
+      "isQuickWin": true,
+      "estimatedFixMinutes": 15
+    },
+    {
+      "checkId": "G28",
+      "category": "Ads & Assets",
+      "description": "RSA description count (≥3)",
+      "result": "pass",
+      "severity": "medium",
+      "details": "All 24957 RSAs have ≥3 descriptions",
+      "recommendation": "",
+      "isQuickWin": false,
+      "estimatedFixMinutes": 10
+    },
+    {
+      "checkId": "G29",
+      "category": "Ads & Assets",
+      "description": "RSA ad strength Good or Excellent",
+      "result": "fail",
+      "severity": "high",
+      "details": "RSA in Ad Group \"(+) Att1 - Hoff Claringbole & Quigley (Formerly Hoff & Panzer)\" — POOR ad strength\nRSA in Ad Group \"(+) Att1 - Hoff Claringbole & Quigley (Formerly Hoff & Panzer)\" — POOR ad strength\nRSA in Ad Group \"(+) Att1 - Herrling Clark\" — POOR ad strength\n…and 3690 more",
+      "recommendation": "Improve poor RSAs: add more unique headlines/descriptions, vary messaging, and avoid repetition",
+      "isQuickWin": false,
+      "estimatedFixMinutes": 20
+    },
+    {
+      "checkId": "G30",
+      "category": "Ads & Assets",
+      "description": "RSA pinning strategy appropriate",
+      "result": "warning",
+      "severity": "medium",
+      "details": "RSA in Ad Group \"Family Attorneys - T2\" — 11 headlines pinned (max 3)\nRSA in Ad Group \"Divorce Attorneys - T2\" — 11 headlines pinned (max 3)\nRSA in Ad Group \"Child Custody Lawyers - T2\" — 11 headlines pinned (max 3)\n…and 108 more",
+      "recommendation": "Reduce pinning to 1-2 positions max. Over-pinning limits Google's ability to find winning combinations",
+      "isQuickWin": false,
+      "estimatedFixMinutes": 10
+    },
+    {
+      "checkId": "G31",
+      "category": "Ads & Assets",
+      "description": "PMax asset groups have maximum density",
+      "result": "fail",
+      "severity": "critical",
+      "details": "Asset Group \"Divorce\" — images: 5/20, headlines: 4/5, descriptions: 4/5, logos: 0/5\nAsset Group \"Divorce - A/B Test (YT Vids) | Prospecting + 40% HHI\" — images: 5/20, headlines: 4/5, descriptions: 4/5, logos: 0/5\nAsset Group \"Divorce - A/B Test (Lifestyle Images) | Prospecting + 40% HHI\" — images: 10/20, headlines: 4/5, descriptions: 4/5, logos: 0/5\n…and 2 more",
+      "recommendation": "Fill all asset slots: 20 images, 5 logos, 5+ videos (16:9, 1:1, 9:16), 5 headlines, 5 descriptions",
+      "isQuickWin": false,
+      "estimatedFixMinutes": 20
+    },
+    {
+      "checkId": "G32",
+      "category": "Ads & Assets",
+      "description": "PMax has native video assets",
+      "result": "manual",
+      "severity": "high",
+      "details": "PMax video assets require manual verification",
+      "recommendation": "Upload native videos in all formats (16:9, 1:1, 9:16) — auto-generated videos perform significantly worse",
+      "isQuickWin": false,
+      "estimatedFixMinutes": 30
+    },
+    {
+      "checkId": "G33",
+      "category": "Ads & Assets",
+      "description": "PMax has ≥2 asset groups (intent-segmented)",
+      "result": "pass",
+      "severity": "medium",
+      "details": "All PMax campaigns have ≥2 asset groups",
+      "recommendation": "",
+      "isQuickWin": false,
+      "estimatedFixMinutes": 20
+    },
+    {
+      "checkId": "G34",
+      "category": "Ads & Assets",
+      "description": "PMax final URL expansion reviewed",
+      "result": "manual",
+      "severity": "high",
+      "details": "PMax final URL expansion setting requires manual review",
+      "recommendation": "Review URL expansion: enable for discovery/broad reach, disable for controlled landing page targeting",
+      "isQuickWin": false,
+      "estimatedFixMinutes": 5
+    },
+    {
+      "checkId": "G35",
+      "category": "Ads & Assets",
+      "description": "Ad copy relevance to keywords",
+      "result": "pass",
+      "severity": "high",
+      "details": "100% of top keywords reflected in ad headlines",
+      "recommendation": "",
+      "isQuickWin": false,
+      "estimatedFixMinutes": 20
+    },
+    {
+      "checkId": "CT-FL1",
+      "category": "Conversion Tracking",
+      "description": "Form fill = single conversion action",
+      "result": "warning",
+      "severity": "high",
+      "details": "Conversion Action \"Lead form - Submit\" — form fill action (risk of double-counting)\nConversion Action \"SF | Lead - New\" — form fill action (risk of double-counting)\nConversion Action \"Sterling Law Offices, S.C. - GA4 (web) form_fill_all\" — form fill action (risk of double-counting)",
+      "recommendation": "Consolidate to one form fill conversion action. Multiple form actions inflate conversion counts and mislead bidding algorithms",
+      "isQuickWin": false,
+      "estimatedFixMinutes": 10
+    },
+    {
+      "checkId": "CT-FL10",
+      "category": "Conversion Tracking",
+      "description": "Offline conversion volume healthy",
+      "result": "manual",
+      "severity": "high",
+      "details": "Total account conversions: 2257 — verify offline volume is proportional",
+      "recommendation": "Compare offline conversion volume to total leads. If Google Ads shows 40 leads but offline tracking shows only 5 qualified leads, investigate data flow issues (CRM sync, Zapier triggers, manual upload cadence)",
+      "isQuickWin": false,
+      "estimatedFixMinutes": 15
+    },
+    {
+      "checkId": "CT-FL2",
+      "category": "Conversion Tracking",
+      "description": "Call tracking platform integrated",
+      "result": "pass",
+      "severity": "high",
+      "details": "Call tracking detected: 8 call conversion actions",
+      "recommendation": "",
+      "isQuickWin": false,
+      "estimatedFixMinutes": 15
+    },
+    {
+      "checkId": "CT-FL3",
+      "category": "Conversion Tracking",
+      "description": "Calls from Ads extension active & primary",
+      "result": "warning",
+      "severity": "high",
+      "details": "Calls from Ads exists but is not marked as primary",
+      "recommendation": "Mark Calls from Ads as a primary conversion action so it feeds into Smart Bidding optimization",
+      "isQuickWin": false,
+      "estimatedFixMinutes": 10
+    },
+    {
+      "checkId": "CT-FL4",
+      "category": "Conversion Tracking",
+      "description": "Offline conversion funnel staged",
+      "result": "pass",
+      "severity": "medium",
+      "details": "Offline funnel has 3/3 stages: qualified, consultation, closed",
+      "recommendation": "",
+      "isQuickWin": false,
+      "estimatedFixMinutes": 20
+    },
+    {
+      "checkId": "CT-FL5",
+      "category": "Conversion Tracking",
+      "description": "Conversion count set to 'One' (lead gen)",
+      "result": "fail",
+      "severity": "critical",
+      "details": "Conversion Action \"Smart campaign map clicks to call\" — count set to 'Every' (should be 'One')\nConversion Action \"Smart campaign map directions\" — count set to 'Every' (should be 'One')",
+      "recommendation": "Switch all lead gen conversions to 'Count: One'. 'Every' counts repeat form fills/calls from the same person, inflating numbers and misleading Smart Bidding",
+      "isQuickWin": true,
+      "estimatedFixMinutes": 5
+    },
+    {
+      "checkId": "CT-FL6",
+      "category": "Conversion Tracking",
+      "description": "No low-value actions marked Primary",
+      "result": "pass",
+      "severity": "critical",
+      "details": "No low-value micro-conversions marked as primary",
+      "recommendation": "",
+      "isQuickWin": false,
+      "estimatedFixMinutes": 10
+    },
+    {
+      "checkId": "CT-FL7",
+      "category": "Conversion Tracking",
+      "description": "Custom Goals include required actions",
+      "result": "manual",
+      "severity": "medium",
+      "details": "Custom Goal configuration requires manual review",
+      "recommendation": "If campaigns use Custom Goals, verify they include all 3 required primary actions: Form Fill, Website Calls (via tracking), and Calls from Ads. Custom Goals should NOT include low-value actions",
+      "isQuickWin": false,
+      "estimatedFixMinutes": 10
+    },
+    {
+      "checkId": "CT-FL8",
+      "category": "Conversion Tracking",
+      "description": "Auto-tagging enabled",
+      "result": "pass",
+      "severity": "critical",
+      "details": "Auto-tagging is enabled",
+      "recommendation": "",
+      "isQuickWin": false,
+      "estimatedFixMinutes": 2
+    },
+    {
+      "checkId": "CT-FL9",
+      "category": "Conversion Tracking",
+      "description": "Tracking template configuration",
+      "result": "pass",
+      "severity": "medium",
+      "details": "All 39 active campaigns have tracking templates configured",
+      "recommendation": "",
+      "isQuickWin": false,
+      "estimatedFixMinutes": 10
+    },
+    {
+      "checkId": "G-CT1",
+      "category": "Conversion Tracking",
+      "description": "No duplicate conversion counting",
+      "result": "fail",
+      "severity": "critical",
+      "details": "Conversion Action \"sterling law offices, s.c. - ga4 (web) call\" — duplicate detected",
+      "recommendation": "Remove or consolidate duplicate conversion actions to prevent double-counting",
+      "isQuickWin": true,
+      "estimatedFixMinutes": 15
+    },
+    {
+      "checkId": "G-CT2",
+      "category": "Conversion Tracking",
+      "description": "GA4 linked and data flowing",
+      "result": "pass",
+      "severity": "high",
+      "details": "Conversion tracking ID detected — GA4 likely linked",
+      "recommendation": "",
+      "isQuickWin": false,
+      "estimatedFixMinutes": 15
+    },
+    {
+      "checkId": "G-CT3",
+      "category": "Conversion Tracking",
+      "description": "Google Tag firing on all pages",
+      "result": "pass",
+      "severity": "critical",
+      "details": "Tag snippets configured for conversion actions",
+      "recommendation": "",
+      "isQuickWin": false,
+      "estimatedFixMinutes": 15
+    },
+    {
+      "checkId": "G42",
+      "category": "Conversion Tracking",
+      "description": "Conversion actions defined",
+      "result": "pass",
+      "severity": "critical",
+      "details": "17 active conversion actions",
+      "recommendation": "",
+      "isQuickWin": false,
+      "estimatedFixMinutes": 10
+    },
+    {
+      "checkId": "G43",
+      "category": "Conversion Tracking",
+      "description": "Enhanced conversions enabled",
+      "result": "pass",
+      "severity": "critical",
+      "details": "Enhanced conversions detected",
+      "recommendation": "",
+      "isQuickWin": false,
+      "estimatedFixMinutes": 5
+    },
+    {
+      "checkId": "G44",
+      "category": "Conversion Tracking",
+      "description": "Server-side tracking active",
+      "result": "pass",
+      "severity": "high",
+      "details": "Server-side conversion import detected",
+      "recommendation": "",
+      "isQuickWin": false,
+      "estimatedFixMinutes": 30
+    },
+    {
+      "checkId": "G45",
+      "category": "Conversion Tracking",
+      "description": "Consent Mode v2 (EU/EEA)",
+      "result": "manual",
+      "severity": "critical",
+      "details": "Cannot verify Consent Mode v2 remotely — manual check required",
+      "recommendation": "Ensure Consent Mode v2 is implemented with a supported CMP for GDPR compliance",
+      "isQuickWin": false,
+      "estimatedFixMinutes": 30
+    },
+    {
+      "checkId": "G46",
+      "category": "Conversion Tracking",
+      "description": "Conversion window matches sales cycle",
+      "result": "pass",
+      "severity": "medium",
+      "details": "All conversion windows within recommended range (30-90 days)",
+      "recommendation": "",
+      "isQuickWin": false,
+      "estimatedFixMinutes": 10
+    },
+    {
+      "checkId": "G47",
+      "category": "Conversion Tracking",
+      "description": "Micro vs macro conversion separation",
+      "result": "pass",
+      "severity": "high",
+      "details": "13 primary, 25 secondary actions — properly separated",
+      "recommendation": "",
+      "isQuickWin": false,
+      "estimatedFixMinutes": 10
+    },
+    {
+      "checkId": "G48",
+      "category": "Conversion Tracking",
+      "description": "Data-driven attribution model active",
+      "result": "fail",
+      "severity": "medium",
+      "details": "Conversion Action \"Smart campaign map clicks to call\" — using GOOGLE_ADS_LAST_CLICK instead of DDA\nConversion Action \"Smart campaign map directions\" — using GOOGLE_ADS_LAST_CLICK instead of DDA",
+      "recommendation": "Switch all conversion actions to Data-Driven Attribution. Rule-based models were deprecated Sep 2025",
+      "isQuickWin": false,
+      "estimatedFixMinutes": 5
+    },
+    {
+      "checkId": "G49",
+      "category": "Conversion Tracking",
+      "description": "Conversion values assigned",
+      "result": "pass",
+      "severity": "high",
+      "details": "Conversion values are being tracked",
+      "recommendation": "",
+      "isQuickWin": false,
+      "estimatedFixMinutes": 15
+    },
+    {
+      "checkId": "G-KW1",
+      "category": "Keywords & Quality Score",
+      "description": "No zero-impression keywords",
+      "result": "fail",
+      "severity": "medium",
+      "details": "Ad Group \"(+) Att1 - Hoff Claringbole & Quigley (Formerly Hoff & Panzer)\" — e.g. keyword \"hoff panzer\", zero impressions (3 keywords)\nAd Group \"(+) Att1 - Herrling Clark\" — e.g. keyword \"herrling clark\", zero impressions (1 keywords)\nAd Group \"(+) Att1 - Cottle, Pasquale, Laborde SC (formerly Kaehne  Cottle  Pasquale & Associates)\" — e.g. keyword \"kaehne cottle pasquale & associates\", zero impressions (3 keywords)\n…and 7875 more",
+      "recommendation": "Pause zero-impression keywords to reduce account complexity and focus budget on performing terms",
+      "isQuickWin": false,
+      "estimatedFixMinutes": 10
+    },
+    {
+      "checkId": "G-KW2",
+      "category": "Keywords & Quality Score",
+      "description": "Keyword-to-ad headline relevance",
+      "result": "pass",
+      "severity": "high",
+      "details": "100% of top keywords reflected in ad headlines",
+      "recommendation": "",
+      "isQuickWin": false,
+      "estimatedFixMinutes": 20
+    },
+    {
+      "checkId": "G20",
+      "category": "Keywords & Quality Score",
+      "description": "Weighted avg Quality Score ≥7",
+      "result": "fail",
+      "severity": "high",
+      "details": "Weighted avg QS: 4.5 — poor quality scores",
+      "recommendation": "Urgently improve keyword-ad-landing page alignment. Low QS = higher CPCs and lower ad positions",
+      "isQuickWin": false,
+      "estimatedFixMinutes": 30
+    },
+    {
+      "checkId": "G21",
+      "category": "Keywords & Quality Score",
+      "description": "No critical low-QS keywords",
+      "result": "fail",
+      "severity": "critical",
+      "details": "Ad Group \"Lawyers and Attorneys - T1\" — e.g. keyword \"find lawyer\" QS 3 (5 low-QS keywords)\nAd Group \"Lawyers and Attorneys - T1\" — e.g. keyword \"find lawyer\" QS 3 (8 low-QS keywords)\nAd Group \"Divorce - T4\" — e.g. keyword \"divorce laws\" QS 3 (1 low-QS keywords)\n…and 174 more",
+      "recommendation": "Pause or fix keywords with QS ≤3 — they drastically increase CPC. Rewrite ads and improve landing page relevance",
+      "isQuickWin": true,
+      "estimatedFixMinutes": 15
+    },
+    {
+      "checkId": "G22",
+      "category": "Keywords & Quality Score",
+      "description": "Expected CTR component healthy",
+      "result": "fail",
+      "severity": "high",
+      "details": "76% of keywords have Below Average expected CTR",
+      "recommendation": "Major CTR issue — rewrite ad copy with keyword-relevant headlines, use ad customizers, and test new variations",
+      "isQuickWin": true,
+      "estimatedFixMinutes": 15
+    },
+    {
+      "checkId": "G23",
+      "category": "Keywords & Quality Score",
+      "description": "Ad relevance component healthy",
+      "result": "pass",
+      "severity": "high",
+      "details": "Only 12% of keywords have Below Average ad relevance",
+      "recommendation": "",
+      "isQuickWin": false,
+      "estimatedFixMinutes": 15
+    },
+    {
+      "checkId": "G24",
+      "category": "Keywords & Quality Score",
+      "description": "Landing page experience healthy",
+      "result": "warning",
+      "severity": "high",
+      "details": "28% of keywords have Below Average landing page experience",
+      "recommendation": "Improve page speed, mobile responsiveness, and content relevance for landing pages",
+      "isQuickWin": false,
+      "estimatedFixMinutes": 30
+    },
+    {
+      "checkId": "G25",
+      "category": "Keywords & Quality Score",
+      "description": "Top-spend keywords have QS ≥7",
+      "result": "fail",
+      "severity": "medium",
+      "details": "Ad Group \"Family Lawyers - T2\" — e.g. keyword \"family lawyer\" QS 5, $2194 spend (2 keywords below QS 7)\nAd Group \"Family Lawyers - T2\" — e.g. keyword \"family lawyer\" QS 4, $2028 spend (2 keywords below QS 7)\nAd Group \"Divorce Lawyers - T2\" — e.g. keyword \"divorce lawyer\" QS 4, $2010 spend (1 keywords below QS 7)\n…and 13 more",
+      "recommendation": "Prioritize QS improvement for top keywords: rewrite ads, improve landing pages, tighten ad group themes",
+      "isQuickWin": false,
+      "estimatedFixMinutes": 20
+    },
+    {
+      "checkId": "G36",
+      "category": "Settings & Targeting",
+      "description": "Smart bidding strategy active",
+      "result": "pass",
+      "severity": "high",
+      "details": "All campaigns using automated bidding",
+      "recommendation": "",
+      "isQuickWin": false,
+      "estimatedFixMinutes": 10
+    },
+    {
+      "checkId": "G37",
+      "category": "Settings & Targeting",
+      "description": "Target CPA/ROAS within 20% of historical",
+      "result": "skipped",
+      "severity": "critical",
+      "details": "No campaigns using Target CPA/ROAS",
+      "recommendation": "",
+      "isQuickWin": false,
+      "estimatedFixMinutes": 10
+    },
+    {
+      "checkId": "G38",
+      "category": "Settings & Targeting",
+      "description": "Learning phase status (<25% of campaigns)",
+      "result": "pass",
+      "severity": "high",
+      "details": "23% of campaigns likely in learning phase",
+      "recommendation": "",
+      "isQuickWin": false,
+      "estimatedFixMinutes": 10
+    },
+    {
+      "checkId": "G39",
+      "category": "Settings & Targeting",
+      "description": "Top performers not budget-limited",
+      "result": "fail",
+      "severity": "high",
+      "details": "Campaign \"IL - 847 - T2 - CORE - Arlington\" — spending $8407 of $290 budget (173 conversions)\nCampaign \"WI - Geo - T2\" — spending $4147 of $125 budget (165 conversions)\nCampaign \"IL - 847 - T1 - CORE - Arlington\" — spending $7508 of $258 budget (153 conversions)\n…and 9 more",
+      "recommendation": "Increase budget for top converters — every dollar constrained here moves to lower-ROAS campaigns",
+      "isQuickWin": true,
+      "estimatedFixMinutes": 10
+    },
+    {
+      "checkId": "G40",
+      "category": "Settings & Targeting",
+      "description": "Manual CPC only on low-volume campaigns",
+      "result": "pass",
+      "severity": "medium",
+      "details": "No high-volume campaigns on Manual CPC",
+      "recommendation": "",
+      "isQuickWin": false,
+      "estimatedFixMinutes": 10
+    },
+    {
+      "checkId": "G41",
+      "category": "Settings & Targeting",
+      "description": "Portfolio bid strategies for low volume",
+      "result": "warning",
+      "severity": "medium",
+      "details": "Campaign \"WI - 920 - T3 - CORE - FOX\" — 10 conversions (low volume)\nCampaign \"WI - 608 - T3 - CORE - MAD\" — 8 conversions (low volume)\nCampaign \"WI - 262 - T4 - CORE - MKE\" — 10 conversions (low volume)\n…and 4 more",
+      "recommendation": "Group low-volume campaigns into portfolio bid strategies to pool conversion data for better optimization",
+      "isQuickWin": false,
+      "estimatedFixMinutes": 15
+    },
+    {
+      "checkId": "G50",
+      "category": "Settings & Targeting",
+      "description": "Sitelink extensions active (≥4)",
+      "result": "pass",
+      "severity": "high",
+      "details": "9 sitelink extensions active",
+      "recommendation": "",
+      "isQuickWin": false,
+      "estimatedFixMinutes": 10
+    },
+    {
+      "checkId": "G51",
+      "category": "Settings & Targeting",
+      "description": "Callout extensions active (≥4)",
+      "result": "pass",
+      "severity": "medium",
+      "details": "4 callout extensions active",
+      "recommendation": "",
+      "isQuickWin": false,
+      "estimatedFixMinutes": 10
+    },
+    {
+      "checkId": "G52",
+      "category": "Settings & Targeting",
+      "description": "Structured snippet extensions active",
+      "result": "fail",
+      "severity": "medium",
+      "details": "No structured snippet extensions",
+      "recommendation": "Add snippets for 'Services': Divorce, Child Custody, Alimony, Property Division, Prenuptial Agreements",
+      "isQuickWin": false,
+      "estimatedFixMinutes": 10
+    },
+    {
+      "checkId": "G53",
+      "category": "Settings & Targeting",
+      "description": "Image extensions active for search",
+      "result": "fail",
+      "severity": "medium",
+      "details": "No image extensions found",
+      "recommendation": "Add image extensions — they can improve CTR by 10%",
+      "isQuickWin": false,
+      "estimatedFixMinutes": 10
+    },
+    {
+      "checkId": "G54",
+      "category": "Settings & Targeting",
+      "description": "Call extensions with tracking (if applicable)",
+      "result": "fail",
+      "severity": "medium",
+      "details": "No call extensions found — critical for family law lead gen",
+      "recommendation": "Add call extensions with call tracking. Phone calls are a primary conversion path for family law",
+      "isQuickWin": false,
+      "estimatedFixMinutes": 10
+    },
+    {
+      "checkId": "G55",
+      "category": "Settings & Targeting",
+      "description": "Lead form extensions tested (lead gen)",
+      "result": "warning",
+      "severity": "low",
+      "details": "No lead form extensions found",
+      "recommendation": "Test lead form extensions — they capture leads directly from the SERP",
+      "isQuickWin": false,
+      "estimatedFixMinutes": 15
+    },
+    {
+      "checkId": "G56",
+      "category": "Settings & Targeting",
+      "description": "Audience segments in Observation mode",
+      "result": "pass",
+      "severity": "high",
+      "details": "Audience segments applied to 2 campaigns",
+      "recommendation": "",
+      "isQuickWin": false,
+      "estimatedFixMinutes": 15
+    },
+    {
+      "checkId": "G57",
+      "category": "Settings & Targeting",
+      "description": "Customer Match lists uploaded (<30d)",
+      "result": "warning",
+      "severity": "high",
+      "details": "No CRM-based Customer Match lists found",
+      "recommendation": "Upload Customer Match lists from your CRM for remarketing and similar audience expansion",
+      "isQuickWin": false,
+      "estimatedFixMinutes": 20
+    },
+    {
+      "checkId": "G58",
+      "category": "Settings & Targeting",
+      "description": "Placement exclusions configured",
+      "result": "manual",
+      "severity": "high",
+      "details": "Placement exclusions require manual verification",
+      "recommendation": "Add account-level placement exclusions for games, kids apps, MFA sites, and irrelevant mobile apps",
+      "isQuickWin": false,
+      "estimatedFixMinutes": 15
+    },
+    {
+      "checkId": "G59",
+      "category": "Settings & Targeting",
+      "description": "Landing page mobile speed (LCP <2.5s)",
+      "result": "warning",
+      "severity": "high",
+      "details": "PageSpeed API did not return results",
+      "recommendation": "Run PageSpeed Insights manually on landing pages",
+      "isQuickWin": false,
+      "estimatedFixMinutes": 30
+    },
+    {
+      "checkId": "G60",
+      "category": "Settings & Targeting",
+      "description": "Landing page relevance to ad groups",
+      "result": "warning",
+      "severity": "high",
+      "details": "28% of keywords report below-average landing page experience. Page titles: \"Sterling Lawyers, LLC Compared to Hoff &amp; Panzer\", \"Sterling Lawyers, LLC Compared to Herrling Clark\", \"Sterling Lawyers, LLC Compared to Kaehne, Cottle, Pasquale &amp; Associates\", \"Sterling Lawyers, LLC Compared to David C. Rashid\", \"Sterling Lawyers, LLC Compared to McCarty Law\"",
+      "recommendation": "Improve landing page relevance — each practice area should have a dedicated landing page with matching H1",
+      "isQuickWin": false,
+      "estimatedFixMinutes": 30
+    },
+    {
+      "checkId": "G61",
+      "category": "Settings & Targeting",
+      "description": "Landing page schema markup present",
+      "result": "fail",
+      "severity": "medium",
+      "details": "No schema markup detected on any landing page",
+      "recommendation": "Add JSON-LD schema: Attorney, LegalService, FAQPage, LocalBusiness for enhanced search presence",
+      "isQuickWin": false,
+      "estimatedFixMinutes": 20
+    },
+    {
+      "checkId": "ST01",
+      "category": "Settings & Targeting",
+      "description": "Auto-Apply Recommendations disabled",
+      "result": "pass",
+      "severity": "critical",
+      "details": "No auto-applied recommendation changes detected in last 14 days",
+      "recommendation": "",
+      "isQuickWin": false,
+      "estimatedFixMinutes": 5
+    },
+    {
+      "checkId": "ST02",
+      "category": "Settings & Targeting",
+      "description": "No disapproved ads in active campaigns",
+      "result": "pass",
+      "severity": "high",
+      "details": "No disapproved ads detected in active ad groups",
+      "recommendation": "",
+      "isQuickWin": false,
+      "estimatedFixMinutes": 10
+    },
+    {
+      "checkId": "ST03",
+      "category": "Settings & Targeting",
+      "description": "Language targeting set to English",
+      "result": "pass",
+      "severity": "medium",
+      "details": "All campaigns target English language",
+      "recommendation": "",
+      "isQuickWin": false,
+      "estimatedFixMinutes": 5
+    },
+    {
+      "checkId": "ST04",
+      "category": "Settings & Targeting",
+      "description": "Low-income zip codes excluded",
+      "result": "manual",
+      "severity": "medium",
+      "details": "Zip code exclusion strategy requires manual review",
+      "recommendation": "Exclude low-income zip codes where the target client demographic doesn't reside. Review income-level targeting in campaign location settings and add exclusions for areas with low case value potential",
+      "isQuickWin": false,
+      "estimatedFixMinutes": 20
+    },
+    {
+      "checkId": "ST05",
+      "category": "Settings & Targeting",
+      "description": "Device CPL within 30% of account average",
+      "result": "manual",
+      "severity": "high",
+      "details": "Account avg CPL: $47.72 — verify no device exceeds $62.03 (30% above avg)",
+      "recommendation": "Check device performance in the UI. If any device (mobile, desktop, tablet) has CPL more than 30% above the account average, apply a negative bid adjustment. Mobile typically has higher CPL for family law",
+      "isQuickWin": false,
+      "estimatedFixMinutes": 10
+    },
+    {
+      "checkId": "ST06",
+      "category": "Settings & Targeting",
+      "description": "No shared budgets across campaigns",
+      "result": "warning",
+      "severity": "medium",
+      "details": "Shared Budget — 2 campaigns: \"IL - Geo - T2 - Statewide\", \"IL - Geo - T2 - Statewide Landinge Page Experiment\"",
+      "recommendation": "Remove shared budgets and assign individual budgets to each campaign. Shared budgets let Google shift spend unpredictably between campaigns, often favoring lower-value traffic",
+      "isQuickWin": false,
+      "estimatedFixMinutes": 10
+    },
+    {
+      "checkId": "ST07",
+      "category": "Settings & Targeting",
+      "description": "Sitelinks ≥4 with descriptions",
+      "result": "warning",
+      "severity": "high",
+      "details": "5/9 sitelinks missing description lines",
+      "recommendation": "Add description lines to all sitelinks — increases ad space and improves CTR",
+      "isQuickWin": false,
+      "estimatedFixMinutes": 15
+    },
+    {
+      "checkId": "ST08",
+      "category": "Settings & Targeting",
+      "description": "Call extensions scheduled to business hours",
+      "result": "skipped",
+      "severity": "medium",
+      "details": "No call extensions to check scheduling",
+      "recommendation": "",
+      "isQuickWin": false,
+      "estimatedFixMinutes": 10
+    },
+    {
+      "checkId": "SX01",
+      "category": "SterlingX Governance",
+      "description": "Unified UTM taxonomy",
+      "result": "pass",
+      "severity": "high",
+      "details": "100% of campaigns follow consistent naming pattern",
+      "recommendation": "",
+      "isQuickWin": false,
+      "estimatedFixMinutes": 15
+    },
+    {
+      "checkId": "SX02",
+      "category": "SterlingX Governance",
+      "description": "Attribution window documented",
+      "result": "manual",
+      "severity": "critical",
+      "details": "Attribution window alignment requires manual verification",
+      "recommendation": "Document and align attribution windows across all active platforms in a shared tracking sheet",
+      "isQuickWin": false,
+      "estimatedFixMinutes": 10
+    },
+    {
+      "checkId": "SX03",
+      "category": "SterlingX Governance",
+      "description": "Shared audience suppression active",
+      "result": "manual",
+      "severity": "medium",
+      "details": "Cross-platform audience suppression requires manual verification",
+      "recommendation": "Sync customer suppression lists across all platforms to avoid targeting existing customers with acquisition campaigns",
+      "isQuickWin": false,
+      "estimatedFixMinutes": 15
+    },
+    {
+      "checkId": "SX04",
+      "category": "SterlingX Governance",
+      "description": "SterlingX naming convention compliance",
+      "result": "warning",
+      "severity": "medium",
+      "details": "Only 0% campaigns follow SterlingX naming convention",
+      "recommendation": "Rename to [PLATFORM]_[OBJECTIVE]_[AUDIENCE]_[GEO]_[DATE] per SterlingX standards",
+      "isQuickWin": false,
+      "estimatedFixMinutes": 15
+    },
+    {
+      "checkId": "SX05",
+      "category": "SterlingX Governance",
+      "description": "Change log / revision history maintained",
+      "result": "pass",
+      "severity": "low",
+      "details": "100 recent changes logged — active account management",
+      "recommendation": "",
+      "isQuickWin": false,
+      "estimatedFixMinutes": 10
+    },
+    {
+      "checkId": "SX11",
+      "category": "SterlingX Operations",
+      "description": "Account access appropriate (MCC)",
+      "result": "pass",
+      "severity": "critical",
+      "details": "2 unique users with account access",
+      "recommendation": "",
+      "isQuickWin": false,
+      "estimatedFixMinutes": 10
+    },
+    {
+      "checkId": "SX12",
+      "category": "SterlingX Operations",
+      "description": "Billing ownership verified (client-owned)",
+      "result": "manual",
+      "severity": "high",
+      "details": "Billing ownership requires manual verification",
+      "recommendation": "Verify client owns billing method — agency billing should be documented with clear terms",
+      "isQuickWin": false,
+      "estimatedFixMinutes": 10
+    },
+    {
+      "checkId": "SX13",
+      "category": "SterlingX Operations",
+      "description": "Creative asset library organized",
+      "result": "manual",
+      "severity": "medium",
+      "details": "Asset library organization requires manual verification",
+      "recommendation": "Maintain a tagged, dated, versioned creative asset library for efficient ad production",
+      "isQuickWin": false,
+      "estimatedFixMinutes": 15
+    },
+    {
+      "checkId": "SX14",
+      "category": "SterlingX Operations",
+      "description": "A/B test velocity (≥2 tests/month)",
+      "result": "pass",
+      "severity": "medium",
+      "details": "7873 ad groups running A/B tests",
+      "recommendation": "",
+      "isQuickWin": false,
+      "estimatedFixMinutes": 30
+    },
+    {
+      "checkId": "SX15",
+      "category": "SterlingX Operations",
+      "description": "Competitor monitoring cadence",
+      "result": "manual",
+      "severity": "low",
+      "details": "Competitor monitoring cadence requires manual verification",
+      "recommendation": "Conduct monthly competitive analysis — review auction insights, ad copy, and market positioning",
+      "isQuickWin": false,
+      "estimatedFixMinutes": 15
+    },
+    {
+      "checkId": "SX06",
+      "category": "SterlingX Reporting",
+      "description": "GA4 integration verified",
+      "result": "pass",
+      "severity": "high",
+      "details": "Conversion tracking ID detected — GA4 likely linked",
+      "recommendation": "",
+      "isQuickWin": false,
+      "estimatedFixMinutes": 15
+    },
+    {
+      "checkId": "SX07",
+      "category": "SterlingX Reporting",
+      "description": "Offline conversion import pipeline",
+      "result": "pass",
+      "severity": "medium",
+      "details": "Offline conversion import pipeline detected",
+      "recommendation": "",
+      "isQuickWin": false,
+      "estimatedFixMinutes": 20
+    },
+    {
+      "checkId": "SX08",
+      "category": "SterlingX Reporting",
+      "description": "Automated reporting dashboards",
+      "result": "manual",
+      "severity": "medium",
+      "details": "Reporting dashboard status requires manual verification",
+      "recommendation": "Configure Looker Studio or live dashboard for client reporting — manual reports are not scalable",
+      "isQuickWin": false,
+      "estimatedFixMinutes": 30
+    },
+    {
+      "checkId": "SX09",
+      "category": "SterlingX Reporting",
+      "description": "MER (blended ROAS) trackable",
+      "result": "pass",
+      "severity": "high",
+      "details": "Conversion values tracked — MER calculable",
+      "recommendation": "",
+      "isQuickWin": false,
+      "estimatedFixMinutes": 20
+    },
+    {
+      "checkId": "SX10",
+      "category": "SterlingX Reporting",
+      "description": "Monthly pacing alerts configured",
+      "result": "manual",
+      "severity": "medium",
+      "details": "Pacing alert configuration requires manual verification",
+      "recommendation": "Configure automated pacing alerts (budget, CPA, ROAS) to catch deviations before they impact performance",
+      "isQuickWin": false,
+      "estimatedFixMinutes": 15
+    },
+    {
+      "checkId": "G-WS1",
+      "category": "Wasted Spend",
+      "description": "No zero-conversion keywords with high spend",
+      "result": "pass",
+      "severity": "high",
+      "details": "No keywords with >100 clicks and 0 conversions",
+      "recommendation": "",
+      "isQuickWin": false,
+      "estimatedFixMinutes": 10
+    },
+    {
+      "checkId": "G13",
+      "category": "Wasted Spend",
+      "description": "Search term audit recency (<14 days)",
+      "result": "pass",
+      "severity": "critical",
+      "details": "Recent account activity detected in last 14 days",
+      "recommendation": "",
+      "isQuickWin": false,
+      "estimatedFixMinutes": 15
+    },
+    {
+      "checkId": "G14",
+      "category": "Wasted Spend",
+      "description": "Negative keyword lists (≥3 themed)",
+      "result": "pass",
+      "severity": "critical",
+      "details": "105 negative keywords found across campaigns",
+      "recommendation": "",
+      "isQuickWin": false,
+      "estimatedFixMinutes": 10
+    },
+    {
+      "checkId": "G15",
+      "category": "Wasted Spend",
+      "description": "Account-level negatives applied",
+      "result": "fail",
+      "severity": "high",
+      "details": "Negatives only cover 18% of campaigns",
+      "recommendation": "Apply negative keyword lists to all campaigns to prevent irrelevant spend",
+      "isQuickWin": true,
+      "estimatedFixMinutes": 10
+    },
+    {
+      "checkId": "G16",
+      "category": "Wasted Spend",
+      "description": "Wasted spend on irrelevant terms (<5%)",
+      "result": "skipped",
+      "severity": "critical",
+      "details": "No search term data available",
+      "recommendation": "",
+      "isQuickWin": false,
+      "estimatedFixMinutes": 15
+    },
+    {
+      "checkId": "G17",
+      "category": "Wasted Spend",
+      "description": "No Broad Match + Manual CPC pairing",
+      "result": "pass",
+      "severity": "critical",
+      "details": "No broad match keywords using Manual CPC",
+      "recommendation": "",
+      "isQuickWin": false,
+      "estimatedFixMinutes": 5
+    },
+    {
+      "checkId": "G18",
+      "category": "Wasted Spend",
+      "description": "Close variant pollution controlled",
+      "result": "skipped",
+      "severity": "high",
+      "details": "Insufficient data for close variant analysis",
+      "recommendation": "",
+      "isQuickWin": false,
+      "estimatedFixMinutes": 15
+    },
+    {
+      "checkId": "G19",
+      "category": "Wasted Spend",
+      "description": "Search term visibility (>60% visible)",
+      "result": "skipped",
+      "severity": "medium",
+      "details": "No search term data",
+      "recommendation": "",
+      "isQuickWin": false,
+      "estimatedFixMinutes": 10
+    }
+  ]
+}
