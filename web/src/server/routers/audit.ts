@@ -8,13 +8,24 @@ import { GoogleAdsService } from "../services/google-ads";
 import { runAudit } from "../services/audit-engine";
 import { generateAIAnalysis } from "../services/ai-analysis";
 
-function generateReportId(): string {
+const REPORT_PREFIX: Record<string, string> = {
+  google_ads: "SX-ADS",
+  meta_ads: "SX-META",
+  seo: "SX-SEO",
+  local_seo: "SX-LSEO",
+  ai_visibility: "SX-AIV",
+};
+
+function generateReportId(
+  auditType: string = "google_ads"
+): string {
+  const prefix = REPORT_PREFIX[auditType] ?? "SX-ADS";
   const now = new Date();
   const date = now.toISOString().slice(0, 10).replace(/-/g, "");
   const seq = Math.floor(Math.random() * 9999)
     .toString()
     .padStart(4, "0");
-  return `SX-ADS-${date}-${seq}`;
+  return `${prefix}-${date}-${seq}`;
 }
 
 export const auditRouter = router({
@@ -81,6 +92,9 @@ export const auditRouter = router({
     .input(
       z.object({
         googleAccountId: z.string().uuid(),
+        auditType: z
+          .enum(["google_ads", "meta_ads", "seo", "local_seo", "ai_visibility"])
+          .default("google_ads"),
         dateRangeStart: z.string().optional(),
         dateRangeEnd: z.string().optional(),
       })
@@ -101,24 +115,45 @@ export const auditRouter = router({
       if (!account) {
         throw new TRPCError({
           code: "NOT_FOUND",
-          message: "Google Ads account not found",
+          message: "Connection not found",
         });
       }
 
+      const auditType = input.auditType;
+
       // Create audit record
-      const reportId = generateReportId();
+      const reportId = generateReportId(auditType);
       const [audit] = await db
         .insert(audits)
         .values({
           userId: ctx.userId,
           connectionId: account.id,
           clientId: account.clientId,
-          auditType: "google_ads",
+          auditType,
           reportId,
           status: "running",
           startedAt: new Date(),
         })
         .returning();
+
+      // Route to the correct audit engine
+      if (auditType !== "google_ads") {
+        // Placeholder: mark as failed for unimplemented engines
+        await db
+          .update(audits)
+          .set({
+            status: "failed",
+            summary: `The ${auditType.replace(/_/g, " ")} audit engine is coming soon.`,
+            completedAt: new Date(),
+            updatedAt: new Date(),
+          })
+          .where(eq(audits.id, audit.id));
+
+        throw new TRPCError({
+          code: "NOT_IMPLEMENTED",
+          message: `The ${auditType.replace(/_/g, " ")} audit engine is coming soon. Only Google Ads audits are available right now.`,
+        });
+      }
 
       try {
         // Fetch data from Google Ads API

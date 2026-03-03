@@ -245,6 +245,7 @@ export default function ConnectPage() {
   const runAudit = trpc.audit.run.useMutation();
 
   const [selectedClientId, setSelectedClientId] = useState<string | "">("");
+  const [auditTypeMap, setAuditTypeMap] = useState<Record<string, string>>({});
   const [runningFor, setRunningFor] = useState<string | null>(null);
   const [showManual, setShowManual] = useState(manual === "true");
   const [showMccBrowser, setShowMccBrowser] = useState(false);
@@ -283,10 +284,13 @@ export default function ConnectPage() {
     window.location.href = url;
   };
 
-  const handleRunAudit = async (accountId: string) => {
+  const handleRunAudit = async (accountId: string, auditType: string = "google_ads") => {
     setRunningFor(accountId);
     try {
-      const result = await runAudit.mutateAsync({ googleAccountId: accountId });
+      const result = await runAudit.mutateAsync({
+        googleAccountId: accountId,
+        auditType: auditType as "google_ads" | "meta_ads" | "seo" | "local_seo" | "ai_visibility",
+      });
       window.location.href = `/audit/${result.audit.id}`;
     } catch {
       setRunningFor(null);
@@ -559,9 +563,28 @@ export default function ConnectPage() {
                   </div>
 
                   <div className="flex items-center gap-2">
+                    <select
+                      value={auditTypeMap[account.id] ?? "google_ads"}
+                      onChange={(e) =>
+                        setAuditTypeMap((prev) => ({
+                          ...prev,
+                          [account.id]: e.target.value,
+                        }))
+                      }
+                      className="rounded-md border border-border-light bg-white px-2 py-2 text-caption text-text-primary outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-1"
+                    >
+                      <option value="google_ads">Google Ads</option>
+                      <option value="meta_ads">Meta Ads</option>
+                      <option value="seo">SEO</option>
+                      <option value="local_seo">Local SEO</option>
+                      <option value="ai_visibility">AI Visibility</option>
+                    </select>
                     <button
                       onClick={() =>
-                        handleRunAudit(account.id)
+                        handleRunAudit(
+                          account.id,
+                          auditTypeMap[account.id] ?? "google_ads"
+                        )
                       }
                       disabled={runningFor === account.id}
                       className="inline-flex items-center gap-1.5 rounded-md bg-brand px-3.5 py-2 text-caption font-semibold text-white hover:bg-brand-light disabled:opacity-50 transition-colors"

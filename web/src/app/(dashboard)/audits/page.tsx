@@ -55,6 +55,9 @@ export default function AuditsPage() {
                   Account
                 </th>
                 <th className="px-4 py-3 text-center text-caption font-semibold uppercase tracking-wider text-text-secondary">
+                  Type
+                </th>
+                <th className="px-4 py-3 text-center text-caption font-semibold uppercase tracking-wider text-text-secondary">
                   Score
                 </th>
                 <th className="px-4 py-3 text-center text-caption font-semibold uppercase tracking-wider text-text-secondary">
@@ -82,6 +85,11 @@ export default function AuditsPage() {
                   </td>
                   <td className="px-4 py-3 text-small text-text-secondary">
                     {audit.customerName ?? audit.customerId}
+                  </td>
+                  <td className="px-4 py-3 text-center">
+                    <span className="inline-block rounded-full bg-brand-wash px-2 py-0.5 text-caption font-medium text-brand">
+                      {(audit.auditType ?? "google_ads").replace(/_/g, " ")}
+                    </span>
                   </td>
                   <td className="px-4 py-3 text-center">
                     {audit.status === "completed" && audit.score !== null ? (
