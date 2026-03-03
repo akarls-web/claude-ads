@@ -1348,9 +1348,6 @@ export default function AuditReportPage() {
                     <th className="px-4 py-3 text-left text-caption font-bold uppercase tracking-wider">
                       Description
                     </th>
-                    <th className="px-4 py-3 text-left text-caption font-bold uppercase tracking-wider">
-                      Details
-                    </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border-light">
@@ -1368,48 +1365,80 @@ export default function AuditReportPage() {
                         (severityOrder[b.severity ?? "info"] ?? 4)
                       );
                     })
-                    .map((check, i) => (
-                      <tr
-                        key={check.id}
-                        className={cn(
-                          "transition-colors hover:bg-brand-wash/20",
-                          i % 2 === 1 ? "bg-brand-wash/10" : "",
-                        )}
-                      >
-                        <td className="whitespace-nowrap px-4 py-2.5 font-mono text-caption text-text-placeholder">
-                          {check.checkId}
-                        </td>
-                        <td className="px-4 py-2.5 text-caption text-text-secondary">
-                          {check.category}
-                        </td>
-                        <td className="px-3 py-2.5 text-center">
-                          <Badge
-                            className={resultClasses[check.result ?? "info"]}
+                    .flatMap((check, i) => {
+                      const hasDetails = (check.result === "fail" || check.result === "warning" || check.result === "manual") && check.details;
+                      const stripBg = i % 2 === 1 ? "bg-brand-wash/10" : "";
+                      const mainRow = (
+                        <tr
+                          key={check.id}
+                          className={cn(
+                            "transition-colors hover:bg-brand-wash/20",
+                            stripBg,
+                          )}
+                        >
+                          <td className="whitespace-nowrap px-4 py-2.5 font-mono text-caption text-text-placeholder">
+                            {check.checkId}
+                          </td>
+                          <td className="px-4 py-2.5 text-caption text-text-secondary">
+                            {check.category}
+                          </td>
+                          <td className="px-3 py-2.5 text-center">
+                            <Badge
+                              className={resultClasses[check.result ?? "info"]}
+                            >
+                              {check.result}
+                            </Badge>
+                          </td>
+                          <td className="px-3 py-2.5 text-center">
+                            <Badge
+                              className={
+                                severityClasses[check.severity ?? "info"]
+                              }
+                            >
+                              {check.severity}
+                            </Badge>
+                          </td>
+                          <td className="max-w-sm px-4 py-2.5 text-caption text-text-primary">
+                            {check.description}
+                          </td>
+                        </tr>
+                      );
+
+                      if (!hasDetails) return [mainRow];
+
+                      // Split details by common delimiters: semicolons, " — ", or newlines
+                      const detailItems = check.details!
+                        .split(/;\s*|(?:\s—\s)|\n/)
+                        .map((d) => d.trim())
+                        .filter((d) => d.length > 0);
+
+                      const detailRows = detailItems.map((detail, di) => (
+                        <tr
+                          key={`${check.id}-detail-${di}`}
+                          className={cn(
+                            "border-t-0",
+                            stripBg,
+                            check.result === "fail"
+                              ? "bg-red-50/40 dark:bg-red-950/10"
+                              : check.result === "manual"
+                                ? "bg-purple-50/40 dark:bg-purple-950/10"
+                                : "bg-amber-50/40 dark:bg-amber-950/10",
+                          )}
+                        >
+                          <td className="py-1.5 pl-8 pr-2 text-caption text-text-placeholder">
+                            ↳
+                          </td>
+                          <td
+                            colSpan={4}
+                            className="py-1.5 pl-2 pr-4 text-caption text-text-secondary leading-relaxed"
                           >
-                            {check.result}
-                          </Badge>
-                        </td>
-                        <td className="px-3 py-2.5 text-center">
-                          <Badge
-                            className={
-                              severityClasses[check.severity ?? "info"]
-                            }
-                          >
-                            {check.severity}
-                          </Badge>
-                        </td>
-                        <td className="max-w-sm px-4 py-2.5 text-caption text-text-primary">
-                          {check.description}
-                        </td>
-                        <td className="max-w-md px-4 py-2.5 text-caption text-text-secondary">
-                          {(check.result === "fail" || check.result === "warning" || check.result === "manual") && check.details ? (
-                            <span className="leading-relaxed">{check.details}</span>
-                          ) : check.result === "pass" ? (
-                            <span className="text-text-placeholder italic">—</span>
-                          ) : null}
-                        </td>
-                      </tr>
-                    ))}
+                            {detail}
+                          </td>
+                        </tr>
+                      ));
+
+                      return [mainRow, ...detailRows];
+                    })}
                 </tbody>
               </table>
             </div>
