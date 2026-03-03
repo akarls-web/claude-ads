@@ -597,14 +597,62 @@ const structureChecks: CheckFn[] = [
     return { result: "fail", details: detail, recommendation: "Restructure ad groups into single-theme groups with ≤15 keywords. Group keywords by core topic — e.g., 'divorce', 'child custody', 'child support' should be separate ad groups for better ad relevance and Quality Score" };
   }),
 
-  // G04 — Campaign count per objective (≤5 per funnel stage)
+  // G04 — Campaign count per objective (≤5 per funnel stage, grouped by location)
   check("G04", "Account Structure", "Campaign count per objective appropriate", "high", 30, (d) => {
     const campaigns = d.campaigns ?? [];
     const active = campaigns.filter((c: any) => c.campaign?.status === "ENABLED");
-    if (active.length <= 5) return { result: "pass", details: `${active.length} active campaigns — well-organized`, recommendation: "" };
-    if (active.length <= 15) return { result: "pass", details: `${active.length} active campaigns`, recommendation: "" };
-    if (active.length <= 25) return { result: "warning", details: `${active.length} active campaigns — may be spreading budget`, recommendation: "Consider consolidating campaigns. Google AI performs better with fewer, well-funded campaigns" };
-    return { result: "fail", details: `${active.length} active campaigns — likely fragmented`, recommendation: "Consolidate to ≤5 campaigns per funnel stage/objective. Fragmentation starves AI-powered bidding of data" };
+    if (active.length === 0) return { result: "skipped", details: "No active campaigns", recommendation: "" };
+
+    // US state abbreviations for geo stripping
+    const stateAbbrevs = new Set([
+      "al","ak","az","ar","ca","co","ct","de","fl","ga","hi","id","il","in","ia",
+      "ks","ky","la","me","md","ma","mi","mn","ms","mo","mt","ne","nv","nh","nj",
+      "nm","ny","nc","nd","oh","ok","or","pa","ri","sc","sd","tn","tx","ut","vt",
+      "va","wa","wv","wi","wy","dc",
+    ]);
+
+    // Strip geographic identifiers from campaign name to find the "base objective"
+    const stripGeo = (name: string): string => {
+      let n = name.toLowerCase().trim();
+      // Remove zip codes (5-digit or 5+4)
+      n = n.replace(/\b\d{5}(-\d{4})?\b/g, "");
+      // Remove state abbreviations when preceded by separator
+      n = n.replace(/[\s_\-|]+([a-z]{2})(?=[\s_\-|]*$)/g, (match, abbr) => stateAbbrevs.has(abbr) ? "" : match);
+      // Remove common geo suffixes: city, county, metro, area, region, market, dma
+      n = n.replace(/[\s_\-|]+(city|county|metro|area|region|market|dma)[\s_\-|]*/gi, " ");
+      // Remove directional qualifiers
+      n = n.replace(/[\s_\-|]+(north|south|east|west|central|northeast|northwest|southeast|southwest|nw|ne|sw|se)[\s_\-|]*/gi, " ");
+      // Remove trailing geo segment after last separator (e.g., "Search_Brand_Dallas" → "Search_Brand")
+      // Only if the preceding part already contains meaningful structure (at least one separator)
+      n = n.replace(/[\s_\-|]+[a-z]+[\s_\-|]*$/, (match) => {
+        // Keep it if it looks like a campaign type keyword
+        const term = match.replace(/[\s_\-|]+/g, "").toLowerCase();
+        const campaignTerms = new Set(["search","brand","nonbrand","pmax","display","video","remarketing","retargeting","dsa","discovery","demandgen","shopping","generic","prospect","broad","exact","phrase"]);
+        return campaignTerms.has(term) ? match : "";
+      });
+      // Normalize whitespace and separators
+      n = n.replace(/[\s_\-|]+/g, "_").replace(/^_|_$/g, "");
+      return n || "unnamed";
+    };
+
+    // Group campaigns by their base objective (geo-stripped name + channel type)
+    const objectiveGroups = new Map<string, number>();
+    for (const c of active) {
+      const name = c.campaign?.name ?? "";
+      const channelType = c.campaign?.advertisingChannelType ?? "UNKNOWN";
+      const baseObjective = `${channelType}::${stripGeo(name)}`;
+      objectiveGroups.set(baseObjective, (objectiveGroups.get(baseObjective) ?? 0) + 1);
+    }
+
+    const uniqueObjectives = objectiveGroups.size;
+    const totalActive = active.length;
+    const isGeoExpanded = uniqueObjectives < totalActive;
+    const geoNote = isGeoExpanded ? ` (${totalActive} total campaigns across ${Math.round(totalActive / uniqueObjectives)} location groups)` : "";
+
+    if (uniqueObjectives <= 5) return { result: "pass", details: `${uniqueObjectives} unique campaign objectives${geoNote} — well-organized`, recommendation: "" };
+    if (uniqueObjectives <= 15) return { result: "pass", details: `${uniqueObjectives} unique campaign objectives${geoNote}`, recommendation: "" };
+    if (uniqueObjectives <= 25) return { result: "warning", details: `${uniqueObjectives} unique campaign objectives${geoNote} — may be spreading budget`, recommendation: "Consider consolidating campaigns. Google AI performs better with fewer, well-funded campaigns" };
+    return { result: "fail", details: `${uniqueObjectives} unique campaign objectives${geoNote} — likely fragmented`, recommendation: "Consolidate to ≤5 campaigns per funnel stage/objective. Fragmentation starves AI-powered bidding of data" };
   }),
 
   // G05 — Brand vs Non-Brand separation
