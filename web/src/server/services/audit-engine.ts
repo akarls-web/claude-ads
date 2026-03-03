@@ -515,21 +515,86 @@ const structureChecks: CheckFn[] = [
     return { result: "fail", details: "No consistent ad group naming convention", recommendation: "Name ad groups clearly by theme/keyword group to improve account navigability" };
   }),
 
-  // G03 — Single theme ad groups (≤15 keywords per group — family law standard)
+  // G03 — Single theme ad groups (≤15 keywords + semantic coherence)
   check("G03", "Account Structure", "Single theme ad groups (≤15 keywords)", "high", 20, (d) => {
     const keywords = d.keywords ?? [];
     if (keywords.length === 0) return { result: "skipped", details: "No keyword data", recommendation: "" };
-    const kwPerGroup = new Map<string, number>();
+
+    // PPC stop words — common modifiers that don't indicate theme
+    const stopWords = new Set([
+      "lawyer", "lawyers", "attorney", "attorneys", "law", "firm", "legal",
+      "near", "me", "best", "top", "good", "cheap", "free", "affordable",
+      "cost", "how", "much", "does", "what", "is", "a", "an", "the", "to",
+      "for", "in", "of", "and", "or", "my", "get", "find", "hire", "need",
+      "help", "service", "services", "consultation", "consult", "online",
+      "local", "office", "county", "state", "city",
+    ]);
+
+    // Group keywords by ad group, collecting texts
+    const kwByGroup = new Map<string, string[]>();
     for (const k of keywords) {
       const agId = String(k.adGroup?.id ?? k.campaign?.id ?? "unknown");
-      kwPerGroup.set(agId, (kwPerGroup.get(agId) ?? 0) + 1);
+      const text = (k.adGroupCriterion?.keyword?.text ?? "").toLowerCase().trim();
+      if (!text) continue;
+      if (!kwByGroup.has(agId)) kwByGroup.set(agId, []);
+      kwByGroup.get(agId)!.push(text);
     }
-    const oversized = [...kwPerGroup.values()].filter((count) => count > 15).length;
-    const total = kwPerGroup.size;
-    if (oversized === 0) return { result: "pass", details: `All ${total} ad groups have focused keyword themes (≤15 keywords each)`, recommendation: "" };
-    const pct = safeDiv(oversized, total) * 100;
-    if (pct < 25) return { result: "warning", details: `${oversized}/${total} ad groups have >15 keywords — potential theme drift`, recommendation: "Split large ad groups into tighter themes of 5-10 keywords (e.g., separate Divorce, Custody, Support)" };
-    return { result: "fail", details: `${oversized}/${total} ad groups have >15 keywords — theme drift`, recommendation: "Restructure ad groups into single-theme groups with ≤15 keywords. Each practice area (Divorce, Custody, Support) should have its own ad group" };
+
+    const total = kwByGroup.size;
+    if (total === 0) return { result: "skipped", details: "No keyword data", recommendation: "" };
+
+    let oversizedCount = 0;
+    let incoherentCount = 0;
+    const incoherentExamples: string[] = [];
+
+    for (const [, texts] of kwByGroup) {
+      // Size check
+      if (texts.length > 15) oversizedCount++;
+
+      // Semantic coherence: tokenize, strip stop words, find dominant theme
+      if (texts.length < 3) continue; // too few to judge coherence
+      const tokenFreq = new Map<string, number>();
+      for (const text of texts) {
+        const tokens = text.replace(/[^a-z0-9\s]/g, "").split(/\s+/).filter((t) => t.length >= 3 && !stopWords.has(t));
+        // Use a set per keyword to count doc-frequency (not term-frequency)
+        const unique = new Set(tokens);
+        for (const t of unique) {
+          tokenFreq.set(t, (tokenFreq.get(t) ?? 0) + 1);
+        }
+      }
+
+      if (tokenFreq.size === 0) continue;
+
+      // Top theme word = most frequent meaningful token
+      const sorted = [...tokenFreq.entries()].sort((a, b) => b[1] - a[1]);
+      const topThemeWord = sorted[0][0];
+      const topThemeCount = sorted[0][1];
+      // How many keywords contain the top theme word?
+      const coherence = topThemeCount / texts.length;
+
+      // If <50% of keywords share the dominant theme, it's incoherent
+      if (coherence < 0.5) {
+        incoherentCount++;
+        // Grab top 3 theme words to show the spread
+        const topThemes = sorted.slice(0, 3).map(([w]) => w);
+        if (incoherentExamples.length < 3) {
+          incoherentExamples.push(`mixed themes: ${topThemes.join(", ")}`);
+        }
+      }
+    }
+
+    // Combine both signals
+    const issues: string[] = [];
+    if (oversizedCount > 0) issues.push(`${oversizedCount}/${total} ad groups have >15 keywords`);
+    if (incoherentCount > 0) issues.push(`${incoherentCount}/${total} ad groups have mixed themes (<50% keyword coherence)`);
+
+    if (issues.length === 0) return { result: "pass", details: `All ${total} ad groups have focused keyword themes (≤15 keywords, coherent topics)`, recommendation: "" };
+
+    const problemPct = safeDiv(Math.max(oversizedCount, incoherentCount), total) * 100;
+    const detail = issues.join("; ") + (incoherentExamples.length > 0 ? ` — e.g. ${incoherentExamples.join("; ")}` : "");
+
+    if (problemPct < 25) return { result: "warning", details: detail, recommendation: "Split multi-theme ad groups into tighter single-topic groups (5-10 keywords each). Each practice area (Divorce, Custody, Support) should have its own ad group" };
+    return { result: "fail", details: detail, recommendation: "Restructure ad groups into single-theme groups with ≤15 keywords. Group keywords by core topic — e.g., 'divorce', 'child custody', 'child support' should be separate ad groups for better ad relevance and Quality Score" };
   }),
 
   // G04 — Campaign count per objective (≤5 per funnel stage)
