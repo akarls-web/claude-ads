@@ -160,7 +160,7 @@ export class GoogleAdsService {
         metrics.cost_per_conversion,
         campaign.tracking_url_template
       FROM campaign
-      WHERE campaign.status != 'REMOVED'
+      WHERE campaign.status = 'ENABLED'
         AND segments.date DURING LAST_30_DAYS
     `);
   }
@@ -183,7 +183,7 @@ export class GoogleAdsService {
         metrics.average_cpc
       FROM ad_group
       WHERE ad_group.status != 'REMOVED'
-        AND campaign.status != 'REMOVED'
+        AND campaign.status = 'ENABLED'
         AND segments.date DURING LAST_30_DAYS
     `);
   }
@@ -209,7 +209,8 @@ export class GoogleAdsService {
         metrics.average_cpc
       FROM keyword_view
       WHERE ad_group_criterion.status != 'REMOVED'
-        AND campaign.status != 'REMOVED'
+        AND ad_group.status != 'REMOVED'
+        AND campaign.status = 'ENABLED'
         AND segments.date DURING LAST_30_DAYS
     `);
   }
@@ -226,7 +227,9 @@ export class GoogleAdsService {
         metrics.cost_micros,
         metrics.conversions
       FROM search_term_view
-      WHERE segments.date DURING LAST_30_DAYS
+      WHERE ad_group.status != 'REMOVED'
+        AND campaign.status = 'ENABLED'
+        AND segments.date DURING LAST_90_DAYS
       ORDER BY metrics.cost_micros DESC
       LIMIT 500
     `);
@@ -253,7 +256,8 @@ export class GoogleAdsService {
         ad_group_ad.policy_summary.approval_status
       FROM ad_group_ad
       WHERE ad_group_ad.status != 'REMOVED'
-        AND campaign.status != 'REMOVED'
+        AND ad_group.status != 'REMOVED'
+        AND campaign.status = 'ENABLED'
         AND segments.date DURING LAST_30_DAYS
     `);
   }
@@ -288,6 +292,7 @@ export class GoogleAdsService {
       FROM campaign_criterion
       WHERE campaign_criterion.negative = TRUE
         AND campaign_criterion.type = 'KEYWORD'
+        AND campaign.status = 'ENABLED'
     `);
   }
 
@@ -303,7 +308,7 @@ export class GoogleAdsService {
           asset_group.ad_strength
         FROM asset_group
         WHERE campaign.advertising_channel_type = 'PERFORMANCE_MAX'
-          AND campaign.status != 'REMOVED'
+          AND campaign.status = 'ENABLED'
       `);
     } catch {
       return []; // No PMax campaigns
@@ -362,7 +367,7 @@ export class GoogleAdsService {
         campaign.name
       FROM campaign_criterion
       WHERE campaign_criterion.type = 'AD_SCHEDULE'
-        AND campaign.status != 'REMOVED'
+        AND campaign.status = 'ENABLED'
     `);
   }
 
@@ -374,7 +379,7 @@ export class GoogleAdsService {
         campaign.name
       FROM campaign_criterion
       WHERE campaign_criterion.type = 'LANGUAGE'
-        AND campaign.status != 'REMOVED'
+        AND campaign.status = 'ENABLED'
     `);
   }
 
@@ -387,7 +392,7 @@ export class GoogleAdsService {
         campaign.name
       FROM campaign_criterion
       WHERE campaign_criterion.type IN ('USER_LIST', 'USER_INTEREST', 'CUSTOM_AUDIENCE')
-        AND campaign.status != 'REMOVED'
+        AND campaign.status = 'ENABLED'
     `);
   }
 
@@ -414,7 +419,7 @@ export class GoogleAdsService {
         campaign.id
       FROM asset_group_asset
       WHERE campaign.advertising_channel_type = 'PERFORMANCE_MAX'
-        AND campaign.status != 'REMOVED'
+        AND campaign.status = 'ENABLED'
         AND asset_group.status != 'REMOVED'
         AND asset_group_asset.status != 'REMOVED'
     `);
@@ -429,7 +434,7 @@ export class GoogleAdsService {
         campaign.id
       FROM asset_group_signal
       WHERE campaign.advertising_channel_type = 'PERFORMANCE_MAX'
-        AND campaign.status != 'REMOVED'
+        AND campaign.status = 'ENABLED'
     `);
   }
 
