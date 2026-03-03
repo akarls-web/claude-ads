@@ -36,13 +36,47 @@ export const severityEnum = pgEnum("severity", [
   "low",
 ]);
 
+export const platformTypeEnum = pgEnum("platform_type", [
+  "google_ads",
+  "google_search_console",
+  "meta_ads",
+  "manual",
+]);
+
+export const auditTypeEnum = pgEnum("audit_type", [
+  "google_ads",
+  "meta_ads",
+  "seo",
+  "local_seo",
+  "ai_visibility",
+]);
+
 // ---------- Tables ----------
 
-export const googleAccounts = pgTable("google_accounts", {
+/** Clients — each user can have multiple clients (businesses being audited) */
+export const clients = pgTable("clients", {
   id: uuid("id").defaultRandom().primaryKey(),
   userId: text("user_id").notNull(), // Clerk user ID
-  customerId: text("customer_id").notNull(), // Google Ads Customer ID
-  customerName: text("customer_name"),
+  name: text("name").notNull(),
+  industry: text("industry"),
+  website: text("website"),
+  logoUrl: text("logo_url"),
+  notes: text("notes"),
+  isActive: boolean("is_active").default(true),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+/** Connections — platform credentials linked to a client */
+export const connections = pgTable("connections", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  userId: text("user_id").notNull(), // Clerk user ID
+  clientId: uuid("client_id").references(() => clients.id, {
+    onDelete: "cascade",
+  }),
+  platform: platformTypeEnum("platform").notNull().default("google_ads"),
+  externalId: text("external_id").notNull(), // Platform-specific account ID (e.g. Google Ads CID)
+  accountName: text("account_name"),
   accessToken: text("access_token").notNull(),
   refreshToken: text("refresh_token").notNull(),
   tokenExpiresAt: timestamp("token_expires_at"),
@@ -53,12 +87,21 @@ export const googleAccounts = pgTable("google_accounts", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
+/**
+ * Backward-compat alias — existing code references `googleAccounts`.
+ * This points to the renamed `connections` table.
+ * TODO: Remove once all consumers migrate to `connections` directly.
+ */
+export const googleAccounts = connections;
+
 export const audits = pgTable("audits", {
   id: uuid("id").defaultRandom().primaryKey(),
   userId: text("user_id").notNull(),
-  googleAccountId: uuid("google_account_id").references(
-    () => googleAccounts.id
-  ),
+  clientId: uuid("client_id").references(() => clients.id),
+  connectionId: uuid("connection_id").references(() => connections.id),
+  auditType: auditTypeEnum("audit_type").notNull().default("google_ads"),
+  // Legacy column — kept nullable for migration, will be dropped later
+  googleAccountId: uuid("google_account_id"),
   reportId: text("report_id").notNull(), // SX-ADS-YYYYMMDD-SEQ
   status: auditStatusEnum("status").default("pending").notNull(),
   score: real("score"),
@@ -73,7 +116,7 @@ export const audits = pgTable("audits", {
   skippedCount: integer("skipped_count").default(0),
   manualCount: integer("manual_count").default(0),
   summary: text("summary"),
-  rawData: jsonb("raw_data"), // Cached Google Ads data snapshot
+  rawData: jsonb("raw_data"), // Cached audit data snapshot
   aiAnalysis: jsonb("ai_analysis"), // Claude-generated narrative analysis
   startedAt: timestamp("started_at"),
   completedAt: timestamp("completed_at"),
@@ -100,8 +143,14 @@ export const auditChecks = pgTable("audit_checks", {
 
 // ---------- Types ----------
 
-export type GoogleAccount = typeof googleAccounts.$inferSelect;
-export type NewGoogleAccount = typeof googleAccounts.$inferInsert;
+export type Client = typeof clients.$inferSelect;
+export type NewClient = typeof clients.$inferInsert;
+export type Connection = typeof connections.$inferSelect;
+export type NewConnection = typeof connections.$inferInsert;
+/** @deprecated Use Connection instead */
+export type GoogleAccount = typeof connections.$inferSelect;
+/** @deprecated Use NewConnection instead */
+export type NewGoogleAccount = typeof connections.$inferInsert;
 export type Audit = typeof audits.$inferSelect;
 export type NewAudit = typeof audits.$inferInsert;
 export type AuditCheck = typeof auditChecks.$inferSelect;

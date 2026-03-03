@@ -2,21 +2,21 @@ import { z } from "zod";
 import { eq, and, desc, ne } from "drizzle-orm";
 import { router, protectedProcedure } from "../trpc";
 import { db } from "../db";
-import { googleAccounts } from "../db/schema";
+import { connections } from "../db/schema";
 
 export const accountRouter = router({
   list: protectedProcedure.query(async ({ ctx }) => {
     return db
       .select()
-      .from(googleAccounts)
+      .from(connections)
       .where(
         and(
-          eq(googleAccounts.userId, ctx.userId),
-          eq(googleAccounts.isActive, true),
-          ne(googleAccounts.customerId, "oauth-connected")
+          eq(connections.userId, ctx.userId),
+          eq(connections.isActive, true),
+          ne(connections.externalId, "oauth-connected")
         )
       )
-      .orderBy(desc(googleAccounts.connectedAt));
+      .orderBy(desc(connections.connectedAt));
   }),
 
   /** Add a customer ID manually — copies tokens from the "oauth-connected" placeholder row */
@@ -29,11 +29,11 @@ export const accountRouter = router({
       // Find the oauth-connected placeholder to copy tokens from
       const [placeholder] = await db
         .select()
-        .from(googleAccounts)
+        .from(connections)
         .where(
           and(
-            eq(googleAccounts.userId, ctx.userId),
-            eq(googleAccounts.customerId, "oauth-connected")
+            eq(connections.userId, ctx.userId),
+            eq(connections.externalId, "oauth-connected")
           )
         );
 
@@ -42,21 +42,22 @@ export const accountRouter = router({
       }
 
       // Try to fetch account name
-      let customerName = `Account ${cid}`;
+      let accountName = `Account ${cid}`;
       try {
         const { GoogleAdsService } = await import("../services/google-ads");
         const svc = new GoogleAdsService(placeholder.accessToken);
-        customerName = await svc.getCustomerName(cid);
+        accountName = await svc.getCustomerName(cid);
       } catch {
         // keep default name
       }
 
       const [created] = await db
-        .insert(googleAccounts)
+        .insert(connections)
         .values({
           userId: ctx.userId,
-          customerId: cid,
-          customerName,
+          platform: "google_ads",
+          externalId: cid,
+          accountName,
           accessToken: placeholder.accessToken,
           refreshToken: placeholder.refreshToken,
           tokenExpiresAt: placeholder.tokenExpiresAt,
@@ -69,11 +70,11 @@ export const accountRouter = router({
   mccChildren: protectedProcedure
     .input(z.object({ mccId: z.string().min(5).max(15) }))
     .query(async ({ ctx, input }) => {
-      // Find any stored account row for this user to get a refresh token
+      // Find any stored connection row for this user to get a refresh token
       const [tokenRow] = await db
         .select()
-        .from(googleAccounts)
-        .where(eq(googleAccounts.userId, ctx.userId))
+        .from(connections)
+        .where(eq(connections.userId, ctx.userId))
         .limit(1);
 
       if (!tokenRow) {
@@ -100,8 +101,8 @@ export const accountRouter = router({
     .mutation(async ({ ctx, input }) => {
       const [tokenRow] = await db
         .select()
-        .from(googleAccounts)
-        .where(eq(googleAccounts.userId, ctx.userId))
+        .from(connections)
+        .where(eq(connections.userId, ctx.userId))
         .limit(1);
 
       if (!tokenRow) {
@@ -110,24 +111,25 @@ export const accountRouter = router({
 
       // Get existing CIDs for this user to avoid duplicates
       const existing = await db
-        .select({ customerId: googleAccounts.customerId })
-        .from(googleAccounts)
+        .select({ externalId: connections.externalId })
+        .from(connections)
         .where(
           and(
-            eq(googleAccounts.userId, ctx.userId),
-            eq(googleAccounts.isActive, true)
+            eq(connections.userId, ctx.userId),
+            eq(connections.isActive, true)
           )
         );
-      const existingCids = new Set(existing.map((r) => r.customerId));
+      const existingCids = new Set(existing.map((r) => r.externalId));
 
       const added: string[] = [];
       for (const acct of input.accounts) {
         const cid = acct.customerId.replace(/-/g, "");
         if (existingCids.has(cid)) continue;
-        await db.insert(googleAccounts).values({
+        await db.insert(connections).values({
           userId: ctx.userId,
-          customerId: cid,
-          customerName: acct.customerName,
+          platform: "google_ads",
+          externalId: cid,
+          accountName: acct.customerName,
           accessToken: tokenRow.accessToken,
           refreshToken: tokenRow.refreshToken,
           tokenExpiresAt: tokenRow.tokenExpiresAt,
@@ -141,12 +143,12 @@ export const accountRouter = router({
     .input(z.object({ accountId: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
       const [updated] = await db
-        .update(googleAccounts)
+        .update(connections)
         .set({ isActive: false, updatedAt: new Date() })
         .where(
           and(
-            eq(googleAccounts.id, input.accountId),
-            eq(googleAccounts.userId, ctx.userId)
+            eq(connections.id, input.accountId),
+            eq(connections.userId, ctx.userId)
           )
         )
         .returning();

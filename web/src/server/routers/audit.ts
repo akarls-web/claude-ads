@@ -3,7 +3,7 @@ import { eq, and, desc } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { router, protectedProcedure } from "../trpc";
 import { db } from "../db";
-import { audits, auditChecks, googleAccounts } from "../db/schema";
+import { audits, auditChecks, connections } from "../db/schema";
 import { GoogleAdsService } from "../services/google-ads";
 import { runAudit } from "../services/audit-engine";
 import { generateAIAnalysis } from "../services/ai-analysis";
@@ -26,12 +26,14 @@ export const auditRouter = router({
         status: audits.status,
         score: audits.score,
         grade: audits.grade,
-        customerId: googleAccounts.customerId,
-        customerName: googleAccounts.customerName,
+        auditType: audits.auditType,
+        clientId: audits.clientId,
+        customerId: connections.externalId,
+        customerName: connections.accountName,
         createdAt: audits.createdAt,
       })
       .from(audits)
-      .leftJoin(googleAccounts, eq(audits.googleAccountId, googleAccounts.id))
+      .leftJoin(connections, eq(audits.connectionId, connections.id))
       .where(eq(audits.userId, ctx.userId))
       .orderBy(desc(audits.createdAt))
       .limit(50);
@@ -48,15 +50,16 @@ export const auditRouter = router({
           status: audits.status,
           score: audits.score,
           grade: audits.grade,
+          auditType: audits.auditType,
           rawData: audits.rawData,
           aiAnalysis: audits.aiAnalysis,
           summary: audits.summary,
-          customerId: googleAccounts.customerId,
-          customerName: googleAccounts.customerName,
+          customerId: connections.externalId,
+          customerName: connections.accountName,
           createdAt: audits.createdAt,
         })
         .from(audits)
-        .leftJoin(googleAccounts, eq(audits.googleAccountId, googleAccounts.id))
+        .leftJoin(connections, eq(audits.connectionId, connections.id))
         .where(
           and(eq(audits.id, input.id), eq(audits.userId, ctx.userId))
         );
@@ -83,15 +86,15 @@ export const auditRouter = router({
       })
     )
     .mutation(async ({ ctx, input }) => {
-      // Verify account belongs to user
+      // Verify connection belongs to user
       const [account] = await db
         .select()
-        .from(googleAccounts)
+        .from(connections)
         .where(
           and(
-            eq(googleAccounts.id, input.googleAccountId),
-            eq(googleAccounts.userId, ctx.userId),
-            eq(googleAccounts.isActive, true)
+            eq(connections.id, input.googleAccountId),
+            eq(connections.userId, ctx.userId),
+            eq(connections.isActive, true)
           )
         );
 
@@ -108,7 +111,9 @@ export const auditRouter = router({
         .insert(audits)
         .values({
           userId: ctx.userId,
-          googleAccountId: account.id,
+          connectionId: account.id,
+          clientId: account.clientId,
+          auditType: "google_ads",
           reportId,
           status: "running",
           startedAt: new Date(),
@@ -120,7 +125,7 @@ export const auditRouter = router({
         const adsService = await GoogleAdsService.fromRefreshToken(
           account.refreshToken
         );
-        const rawData = await adsService.fetchAllAuditData(account.customerId);
+        const rawData = await adsService.fetchAllAuditData(account.externalId);
 
         // Run audit engine
         const report = runAudit(rawData);
@@ -162,8 +167,8 @@ export const auditRouter = router({
 
         // Run AI-powered narrative analysis (Claude)
         const aiAnalysis = await generateAIAnalysis({
-          customerName: account.customerName ?? `Account ${account.customerId}`,
-          customerId: account.customerId,
+          customerName: account.accountName ?? `Account ${account.externalId}`,
+          customerId: account.externalId,
           score: report.score,
           grade: report.grade,
           totalChecks: report.totalChecks,

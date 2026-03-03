@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { exchangeCode } from "@/lib/google-oauth";
 import { db } from "@/server/db";
-import { googleAccounts } from "@/server/db/schema";
+import { connections } from "@/server/db/schema";
 import { eq } from "drizzle-orm";
 import { GoogleAdsService } from "@/server/services/google-ads";
 
@@ -80,10 +80,11 @@ export async function GET(req: NextRequest) {
           const cc = row.customerClient;
           if (cc && !cc.manager) {
             const cid = String(cc.id);
-            await db.insert(googleAccounts).values({
+            await db.insert(connections).values({
               userId,
-              customerId: cid,
-              customerName: cc.descriptiveName ?? `Account ${cid}`,
+              platform: "google_ads",
+              externalId: cid,
+              accountName: cc.descriptiveName ?? `Account ${cid}`,
               accessToken: tokens.access_token,
               refreshToken: tokens.refresh_token!,
               tokenExpiresAt: tokens.expiry_date
@@ -100,10 +101,11 @@ export async function GET(req: NextRequest) {
 
     // Strategy 3: If we still have nothing, save tokens so user can manually add CIDs
     if (customers.length === 0) {
-      await db.insert(googleAccounts).values({
+      await db.insert(connections).values({
         userId,
-        customerId: "oauth-connected",
-        customerName: "OAuth connected — add account IDs manually",
+        platform: "google_ads",
+        externalId: "oauth-connected",
+        accountName: "OAuth connected — add account IDs manually",
         accessToken: tokens.access_token,
         refreshToken: tokens.refresh_token!,
         tokenExpiresAt: tokens.expiry_date
@@ -122,16 +124,17 @@ export async function GET(req: NextRequest) {
     // Store accounts from Strategy 1 (Strategy 2 already stored them inline)
     if (customers.length > 0) {
       // Check if we already stored them (Strategy 2)
-      const existing = await db.select().from(googleAccounts).where(eq(googleAccounts.userId, userId));
-      const existingCids = new Set(existing.map((a) => a.customerId));
+      const existing = await db.select().from(connections).where(eq(connections.userId, userId));
+      const existingCids = new Set(existing.map((a) => a.externalId));
 
       for (const customerId of customers) {
         if (existingCids.has(customerId)) continue;
-        const customerName = await adsService.getCustomerName(customerId);
-        await db.insert(googleAccounts).values({
+        const accountName = await adsService.getCustomerName(customerId);
+        await db.insert(connections).values({
           userId,
-          customerId,
-          customerName,
+          platform: "google_ads",
+          externalId: customerId,
+          accountName,
           accessToken: tokens.access_token,
           refreshToken: tokens.refresh_token!,
           tokenExpiresAt: tokens.expiry_date

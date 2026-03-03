@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { eq, and } from "drizzle-orm";
 import { db } from "@/server/db";
-import { audits, auditChecks, googleAccounts } from "@/server/db/schema";
+import { audits, auditChecks, connections } from "@/server/db/schema";
 import { generateAuditPdf } from "@/server/services/pdf-report";
 
 export const dynamic = "force-dynamic";
@@ -19,7 +19,7 @@ export async function GET(
 
   const { id: auditId } = await params;
 
-  // Fetch audit + account
+  // Fetch audit + connection
   const rows = await db
     .select({
       id: audits.id,
@@ -35,12 +35,12 @@ export async function GET(
       warningCount: audits.warningCount,
       failCount: audits.failCount,
       skippedCount: audits.skippedCount,
-      customerId: googleAccounts.customerId,
-      customerName: googleAccounts.customerName,
+      customerId: connections.externalId,
+      customerName: connections.accountName,
       createdAt: audits.createdAt,
     })
     .from(audits)
-    .leftJoin(googleAccounts, eq(audits.googleAccountId, googleAccounts.id))
+    .leftJoin(connections, eq(audits.connectionId, connections.id))
     .where(and(eq(audits.id, auditId), eq(audits.userId, userId)));
 
   const auditRow = rows[0];

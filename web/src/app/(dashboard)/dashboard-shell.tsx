@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { UserButton } from "@clerk/nextjs";
 import {
   LayoutDashboard,
+  Building2,
   Link2,
   ClipboardList,
 } from "lucide-react";
@@ -12,6 +13,7 @@ import { SterlingXMark } from "@/components/ui/sterlingx-logo";
 
 const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/clients", label: "Clients", icon: Building2 },
   { href: "/connect", label: "Connect", icon: Link2 },
   { href: "/audits", label: "Audits", icon: ClipboardList },
 ];

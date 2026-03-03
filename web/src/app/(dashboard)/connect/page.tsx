@@ -274,7 +274,7 @@ export default function ConnectPage() {
   };
 
   const existingCids = new Set(
-    (accounts.data ?? []).map((a) => a.customerId)
+    (accounts.data ?? []).map((a) => a.externalId)
   );
 
   return (
@@ -487,10 +487,10 @@ export default function ConnectPage() {
                 </div>
                 <div>
                   <p className="text-body font-semibold text-text-primary">
-                    {account.customerName ?? "Google Ads Account"}
+                    {account.accountName ?? "Google Ads Account"}
                   </p>
                   <p className="text-small text-text-secondary">
-                    Customer ID: {account.customerId}
+                    Customer ID: {account.externalId}
                   </p>
                 </div>
               </div>
@@ -517,7 +517,7 @@ export default function ConnectPage() {
                 </button>
 
                 <a
-                  href={`https://ads.google.com/aw/overview?ocid=${account.customerId}`}
+                  href={`https://ads.google.com/aw/overview?ocid=${account.externalId}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   aria-label="Open in Google Ads"
