@@ -80,6 +80,12 @@ function gradeFromScore(score: number): Grade {
 type AuditData = Record<string, any>;
 type CheckFn = (data: AuditData) => AuditCheckResult;
 
+/** Format entity-level detail items, capping at `max` with "and N more" */
+function entityDetails(items: string[], max = 5): string {
+  if (items.length <= max) return items.join("\n");
+  return items.slice(0, max).join("\n") + `\n…and ${items.length - max} more`;
+}
+
 function check(
   id: string,
   category: string,
@@ -160,7 +166,8 @@ const conversionChecks: CheckFn[] = [
       if (window != null && (window < 30 || window > 90)) issues.push(`${name}: ${window}d`);
     }
     if (issues.length === 0) return { result: "pass", details: "All conversion windows within recommended range (30-90 days)", recommendation: "" };
-    return { result: "warning", details: `Windows outside recommended range: ${issues.join(", ")}`, recommendation: "Set conversion window to 30 days for lead gen. Family law sales cycles can extend to 90 days for retained cases" };
+    const windowItems = issues.map(i => `Conversion Action "${i.split(':')[0]}" — window ${i.split(':')[1]?.trim()} (outside 30-90d range)`);
+    return { result: "warning", details: entityDetails(windowItems), recommendation: "Set conversion window to 30 days for lead gen. Family law sales cycles can extend to 90 days for retained cases" };
   }),
 
   // G47 — Micro vs macro separation (Primary vs Secondary) + Count setting
@@ -192,8 +199,8 @@ const conversionChecks: CheckFn[] = [
       return model && model !== "GOOGLE_SEARCH_ATTRIBUTION_DATA_DRIVEN" && model !== "EXTERNAL";
     });
     if (nonDDA.length === 0) return { result: "pass", details: "All primary conversions use Data-Driven Attribution", recommendation: "" };
-    const models = nonDDA.map((c: any) => `${c.conversionAction?.name}: ${c.conversionAction?.attributionModelSettings?.attributionModel}`);
-    return { result: "fail", details: `${nonDDA.length} conversions not using DDA: ${models.join(", ")}`, recommendation: "Switch all conversion actions to Data-Driven Attribution. Rule-based models were deprecated Sep 2025" };
+    const modelItems = nonDDA.map((c: any) => `Conversion Action "${c.conversionAction?.name ?? 'Unknown'}" — using ${c.conversionAction?.attributionModelSettings?.attributionModel} instead of DDA`);
+    return { result: "fail", details: entityDetails(modelItems), recommendation: "Switch all conversion actions to Data-Driven Attribution. Rule-based models were deprecated Sep 2025" };
   }),
 
   // G49 — Conversion value assignment
@@ -214,7 +221,8 @@ const conversionChecks: CheckFn[] = [
     const dupes: string[] = [];
     for (const n of names) { if (seen.has(n)) dupes.push(n); seen.add(n); }
     if (dupes.length === 0) return { result: "pass", details: "No duplicate conversion names detected", recommendation: "" };
-    return { result: "fail", details: `Possible duplicate conversions: ${[...new Set(dupes)].join(", ")}`, recommendation: "Remove or consolidate duplicate conversion actions to prevent double-counting" };
+    const dupeItems = [...new Set(dupes)].map(name => `Conversion Action "${name}" — duplicate detected`);
+    return { result: "fail", details: entityDetails(dupeItems), recommendation: "Remove or consolidate duplicate conversion actions to prevent double-counting" };
   }),
 
   // G-CT2 — GA4 linked and flowing
@@ -240,8 +248,8 @@ const conversionChecks: CheckFn[] = [
         return { result: "pass", details: `${tagType} detected on ${withTag.length}/${lpAnalysis.length} landing pages`, recommendation: "" };
       }
       if (withTag.length > 0) {
-        const missing = lpAnalysis.filter((lp: any) => !lp.hasGtag && !lp.hasGTM).map((lp: any) => lp.url);
-        return { result: "warning", details: `Tag found on ${withTag.length}/${lpAnalysis.length} pages. Missing: ${missing.join(", ")}`, recommendation: "Ensure gtag.js or GTM fires on ALL landing pages including thank-you pages" };
+        const missingItems = lpAnalysis.filter((lp: any) => !lp.hasGtag && !lp.hasGTM).map((lp: any) => `Landing Page "${lp.url}" \u2014 no Google Tag detected`);
+        return { result: "warning", details: entityDetails(missingItems), recommendation: "Ensure gtag.js or GTM fires on ALL landing pages including thank-you pages" };
       }
       return { result: "fail", details: `No Google Tag detected on ${lpAnalysis.length} landing pages analyzed`, recommendation: "Install Google Tag Manager or gtag.js across all landing pages" };
     }
@@ -262,7 +270,8 @@ const conversionChecks: CheckFn[] = [
     });
     if (formActions.length === 1) return { result: "pass", details: "Single form fill conversion action — properly configured", recommendation: "" };
     if (formActions.length === 0) return { result: "fail", details: "No form fill conversion action detected", recommendation: "Set up a GA4 form submission event imported into Google Ads as a single conversion action" };
-    return { result: "warning", details: `${formActions.length} form fill conversion actions found — risk of double-counting`, recommendation: "Consolidate to one form fill conversion action. Multiple form actions inflate conversion counts and mislead bidding algorithms" };
+    const formItems = formActions.map((c: any) => `Conversion Action "${c.conversionAction?.name ?? 'Unknown'}" — form fill action (risk of double-counting)`);
+    return { result: "warning", details: entityDetails(formItems), recommendation: "Consolidate to one form fill conversion action. Multiple form actions inflate conversion counts and mislead bidding algorithms" };
   }),
 
   // CT-FL2 — Call tracking platform present
@@ -321,8 +330,8 @@ const conversionChecks: CheckFn[] = [
     if (!hasCountData) return { result: "warning", details: `${primary.length} primary conversions — counting type data not available`, recommendation: "Verify all primary conversions use 'Count: One' for lead gen" };
     const manyPerClick = primary.filter((c: any) => c.conversionAction?.countingType === "MANY_PER_CLICK");
     if (manyPerClick.length === 0) return { result: "pass", details: `All ${primary.length} primary conversions set to 'One per click'`, recommendation: "" };
-    const names = manyPerClick.map((c: any) => c.conversionAction?.name).join(", ");
-    return { result: "fail", details: `${manyPerClick.length} primary conversions set to 'Every': ${names}`, recommendation: "Switch all lead gen conversions to 'Count: One'. 'Every' counts repeat form fills/calls from the same person, inflating numbers and misleading Smart Bidding" };
+    const countItems = manyPerClick.map((c: any) => `Conversion Action "${c.conversionAction?.name ?? 'Unknown'}" — count set to 'Every' (should be 'One')`);
+    return { result: "fail", details: entityDetails(countItems), recommendation: "Switch all lead gen conversions to 'Count: One'. 'Every' counts repeat form fills/calls from the same person, inflating numbers and misleading Smart Bidding" };
   }),
 
   // CT-FL6 — Low-value actions not marked as Primary
@@ -334,8 +343,8 @@ const conversionChecks: CheckFn[] = [
       return /scroll|page.?view|time.?on|button.?click|newsletter|signup|download|pdf|chat|video|watch|engaged/i.test(name);
     });
     if (lowValue.length === 0) return { result: "pass", details: "No low-value micro-conversions marked as primary", recommendation: "" };
-    const names = lowValue.map((c: any) => c.conversionAction?.name).join(", ");
-    return { result: "fail", details: `Low-value actions marked as primary: ${names}`, recommendation: "Move low-value actions (page scrolls, button clicks, newsletter signups) to secondary. They inflate conversion counts and mislead Smart Bidding" };
+    const lvItems = lowValue.map((c: any) => `Conversion Action "${c.conversionAction?.name ?? 'Unknown'}" — low-value action marked as Primary`);
+    return { result: "fail", details: entityDetails(lvItems), recommendation: "Move low-value actions (page scrolls, button clicks, newsletter signups) to secondary. They inflate conversion counts and mislead Smart Bidding" };
   }),
 
   // CT-FL7 — Custom Goal includes required primary actions
@@ -438,7 +447,13 @@ const wastedSpendChecks: CheckFn[] = [
       k.campaign?.biddingStrategyType === "MANUAL_CPC"
     );
     if (broadManual.length === 0) return { result: "pass", details: "No broad match keywords using Manual CPC", recommendation: "" };
-    return { result: "fail", details: `${broadManual.length} broad match keywords using Manual CPC — uncontrolled spend risk`, recommendation: "Switch broad match keywords to Smart Bidding (Target CPA/ROAS) or change to phrase/exact match" };
+    const bmItems = broadManual.slice(0, 5).map((k: any) => {
+      const kwText = k.adGroupCriterion?.keyword?.text ?? "Unknown";
+      const cName = k.campaign?.name ?? k.adGroup?.name ?? "Unknown";
+      return `Keyword "${kwText}" in Campaign "${cName}" \u2014 Broad Match on Manual CPC`;
+    });
+    if (broadManual.length > 5) bmItems.push(`\u2026and ${broadManual.length - 5} more`);
+    return { result: "fail", details: entityDetails(bmItems), recommendation: "Switch broad match keywords to Smart Bidding (Target CPA/ROAS) or change to phrase/exact match" };
   }),
 
   // G18 — Close variant pollution
@@ -481,8 +496,19 @@ const wastedSpendChecks: CheckFn[] = [
       Number(k.metrics?.conversions ?? 0) === 0
     );
     if (zeroConv.length === 0) return { result: "pass", details: "No keywords with >100 clicks and 0 conversions", recommendation: "" };
-    if (zeroConv.length <= 3) return { result: "warning", details: `${zeroConv.length} keywords with >100 clicks and 0 conversions`, recommendation: "Review and pause or restructure these underperforming keywords" };
-    return { result: "fail", details: `${zeroConv.length} keywords with >100 clicks and 0 conversions — significant waste`, recommendation: "Pause keywords with high clicks and zero conversions immediately, then review targeting and landing pages" };
+    const zcItems = zeroConv
+      .sort((a: any, b: any) => Number(b.metrics?.clicks ?? 0) - Number(a.metrics?.clicks ?? 0))
+      .slice(0, 5)
+      .map((k: any) => {
+        const kwText = k.adGroupCriterion?.keyword?.text ?? "Unknown";
+        const agName = k.adGroup?.name ?? k.campaign?.name ?? "Unknown";
+        const clicks = Number(k.metrics?.clicks ?? 0);
+        const spend = microsToValue(k.metrics?.costMicros);
+        return `Keyword "${kwText}" in Ad Group "${agName}" \u2014 ${clicks} clicks, $${spend.toFixed(0)} spend, 0 conversions`;
+      });
+    if (zeroConv.length > 5) zcItems.push(`\u2026and ${zeroConv.length - 5} more`);
+    if (zeroConv.length <= 3) return { result: "warning", details: entityDetails(zcItems), recommendation: "Review and pause or restructure these underperforming keywords" };
+    return { result: "fail", details: entityDetails(zcItems), recommendation: "Pause keywords with high clicks and zero conversions immediately, then review targeting and landing pages" };
   }),
 ];
 
@@ -499,8 +525,13 @@ const structureChecks: CheckFn[] = [
     const hasConvention = names.filter((n: string) => /[_\-|]/.test(n) && n.length > 5).length;
     const pct = safeDiv(hasConvention, names.length) * 100;
     if (pct >= 80) return { result: "pass", details: `${pct.toFixed(0)}% of campaigns follow naming convention`, recommendation: "" };
-    if (pct >= 40) return { result: "warning", details: `Only ${pct.toFixed(0)}% of campaigns have structured names`, recommendation: "Use consistent naming: [Brand]_[Type]_[Geo]_[Target] (e.g., SEARCH_BRAND_US_2026Q1)" };
-    return { result: "fail", details: "No consistent campaign naming convention detected", recommendation: "Implement structured naming convention across all campaigns for better organization and reporting" };
+    const nonConforming = campaigns
+      .filter((c: any) => { const n = c.campaign?.name ?? ""; return !((/[_\-|]/.test(n) && n.length > 5)); })
+      .slice(0, 5)
+      .map((c: any) => `Campaign "${c.campaign?.name ?? 'Unnamed'}" \u2014 no structured naming pattern detected`);
+    if (campaigns.length - hasConvention > 5) nonConforming.push(`\u2026and ${campaigns.length - hasConvention - 5} more`);
+    if (pct >= 40) return { result: "warning", details: entityDetails(nonConforming), recommendation: "Use consistent naming: [Brand]_[Type]_[Geo]_[Target] (e.g., SEARCH_BRAND_US_2026Q1)" };
+    return { result: "fail", details: entityDetails(nonConforming), recommendation: "Implement structured naming convention across all campaigns for better organization and reporting" };
   }),
 
   // G02 — Ad group naming convention
@@ -511,8 +542,17 @@ const structureChecks: CheckFn[] = [
     const hasConvention = names.filter((n: string) => /[_\-|]/.test(n) && n.length > 3).length;
     const pct = safeDiv(hasConvention, names.length) * 100;
     if (pct >= 80) return { result: "pass", details: `${pct.toFixed(0)}% of ad groups follow naming convention`, recommendation: "" };
-    if (pct >= 40) return { result: "warning", details: `Only ${pct.toFixed(0)}% of ad groups have structured names`, recommendation: "Match ad group naming to campaign pattern for consistency" };
-    return { result: "fail", details: "No consistent ad group naming convention", recommendation: "Name ad groups clearly by theme/keyword group to improve account navigability" };
+    const nonConforming = adGroups
+      .filter((ag: any) => { const n = ag.adGroup?.name ?? ""; return !((/[_\-|]/.test(n) && n.length > 3)); })
+      .slice(0, 5)
+      .map((ag: any) => {
+        const agName = ag.adGroup?.name ?? "Unnamed";
+        const cName = ag.campaign?.name ?? "";
+        return `Ad Group "${agName}"${cName ? ` in Campaign "${cName}"` : ""} \u2014 no structured naming pattern`;
+      });
+    if (adGroups.length - hasConvention > 5) nonConforming.push(`\u2026and ${adGroups.length - hasConvention - 5} more`);
+    if (pct >= 40) return { result: "warning", details: entityDetails(nonConforming), recommendation: "Match ad group naming to campaign pattern for consistency" };
+    return { result: "fail", details: entityDetails(nonConforming), recommendation: "Name ad groups clearly by theme/keyword group to improve account navigability" };
   }),
 
   // G03 — Single theme ad groups (≤15 keywords + semantic coherence)
@@ -530,71 +570,62 @@ const structureChecks: CheckFn[] = [
       "local", "office", "county", "state", "city",
     ]);
 
-    // Group keywords by ad group, collecting texts
-    const kwByGroup = new Map<string, string[]>();
+    // Group keywords by ad group, collecting texts + track ad group name
+    const kwByGroup = new Map<string, { name: string; texts: string[] }>();
     for (const k of keywords) {
       const agId = String(k.adGroup?.id ?? k.campaign?.id ?? "unknown");
+      const agName = k.adGroup?.name ?? k.campaign?.name ?? agId;
       const text = (k.adGroupCriterion?.keyword?.text ?? "").toLowerCase().trim();
       if (!text) continue;
-      if (!kwByGroup.has(agId)) kwByGroup.set(agId, []);
-      kwByGroup.get(agId)!.push(text);
+      if (!kwByGroup.has(agId)) kwByGroup.set(agId, { name: agName, texts: [] });
+      kwByGroup.get(agId)!.texts.push(text);
     }
 
     const total = kwByGroup.size;
     if (total === 0) return { result: "skipped", details: "No keyword data", recommendation: "" };
 
-    let oversizedCount = 0;
-    let incoherentCount = 0;
-    const incoherentExamples: string[] = [];
+    const issueItems: string[] = [];
 
-    for (const [, texts] of kwByGroup) {
+    for (const [, group] of kwByGroup) {
+      const itemIssues: string[] = [];
+
       // Size check
-      if (texts.length > 15) oversizedCount++;
+      if (group.texts.length > 15) itemIssues.push(`${group.texts.length} keywords (exceeds 15 max)`);
 
       // Semantic coherence: tokenize, strip stop words, find dominant theme
-      if (texts.length < 3) continue; // too few to judge coherence
-      const tokenFreq = new Map<string, number>();
-      for (const text of texts) {
-        const tokens = text.replace(/[^a-z0-9\s]/g, "").split(/\s+/).filter((t) => t.length >= 3 && !stopWords.has(t));
-        // Use a set per keyword to count doc-frequency (not term-frequency)
-        const unique = new Set(tokens);
-        for (const t of unique) {
-          tokenFreq.set(t, (tokenFreq.get(t) ?? 0) + 1);
+      if (group.texts.length >= 3) {
+        const tokenFreq = new Map<string, number>();
+        for (const text of group.texts) {
+          const tokens = text.replace(/[^a-z0-9\s]/g, "").split(/\s+/).filter((t) => t.length >= 3 && !stopWords.has(t));
+          const unique = new Set(tokens);
+          for (const t of unique) {
+            tokenFreq.set(t, (tokenFreq.get(t) ?? 0) + 1);
+          }
+        }
+
+        if (tokenFreq.size > 0) {
+          const sorted = [...tokenFreq.entries()].sort((a, b) => b[1] - a[1]);
+          const topThemeCount = sorted[0][1];
+          const coherence = topThemeCount / group.texts.length;
+
+          if (coherence < 0.5) {
+            const topThemes = sorted.slice(0, 3).map(([w]) => w);
+            itemIssues.push(`mixed themes (${(coherence * 100).toFixed(0)}% coherence): ${topThemes.join(", ")}`);
+          }
         }
       }
 
-      if (tokenFreq.size === 0) continue;
-
-      // Top theme word = most frequent meaningful token
-      const sorted = [...tokenFreq.entries()].sort((a, b) => b[1] - a[1]);
-      const topThemeWord = sorted[0][0];
-      const topThemeCount = sorted[0][1];
-      // How many keywords contain the top theme word?
-      const coherence = topThemeCount / texts.length;
-
-      // If <50% of keywords share the dominant theme, it's incoherent
-      if (coherence < 0.5) {
-        incoherentCount++;
-        // Grab top 3 theme words to show the spread
-        const topThemes = sorted.slice(0, 3).map(([w]) => w);
-        if (incoherentExamples.length < 3) {
-          incoherentExamples.push(`mixed themes: ${topThemes.join(", ")}`);
-        }
+      if (itemIssues.length > 0) {
+        issueItems.push(`Ad Group "${group.name}" \u2014 ${itemIssues.join("; ")}`);
       }
     }
 
-    // Combine both signals
-    const issues: string[] = [];
-    if (oversizedCount > 0) issues.push(`${oversizedCount}/${total} ad groups have >15 keywords`);
-    if (incoherentCount > 0) issues.push(`${incoherentCount}/${total} ad groups have mixed themes (<50% keyword coherence)`);
+    if (issueItems.length === 0) return { result: "pass", details: `All ${total} ad groups have focused keyword themes (≤15 keywords, coherent topics)`, recommendation: "" };
 
-    if (issues.length === 0) return { result: "pass", details: `All ${total} ad groups have focused keyword themes (≤15 keywords, coherent topics)`, recommendation: "" };
+    const problemPct = safeDiv(issueItems.length, total) * 100;
 
-    const problemPct = safeDiv(Math.max(oversizedCount, incoherentCount), total) * 100;
-    const detail = issues.join("; ") + (incoherentExamples.length > 0 ? ` — e.g. ${incoherentExamples.join("; ")}` : "");
-
-    if (problemPct < 25) return { result: "warning", details: detail, recommendation: "Split multi-theme ad groups into tighter single-topic groups (5-10 keywords each). Each practice area (Divorce, Custody, Support) should have its own ad group" };
-    return { result: "fail", details: detail, recommendation: "Restructure ad groups into single-theme groups with ≤15 keywords. Group keywords by core topic — e.g., 'divorce', 'child custody', 'child support' should be separate ad groups for better ad relevance and Quality Score" };
+    if (problemPct < 25) return { result: "warning", details: entityDetails(issueItems), recommendation: "Split multi-theme ad groups into tighter single-topic groups (5-10 keywords each). Each practice area (Divorce, Custody, Support) should have its own ad group" };
+    return { result: "fail", details: entityDetails(issueItems), recommendation: "Restructure ad groups into single-theme groups with ≤15 keywords. Group keywords by core topic — e.g., 'divorce', 'child custody', 'child support' should be separate ad groups for better ad relevance and Quality Score" };
   }),
 
   // G04 — Campaign count per objective (≤5 per funnel stage, grouped by location)
@@ -756,8 +787,8 @@ const structureChecks: CheckFn[] = [
       return type && type !== "SEARCH";
     });
     if (nonSearch.length === 0) return { result: "pass", details: "All active campaigns are Search — appropriate for family law lead gen", recommendation: "" };
-    const types = [...new Set(nonSearch.map((c: any) => c.campaign?.advertisingChannelType))];
-    return { result: "warning", details: `Non-search campaign types active: ${types.join(", ")} — review for lead gen appropriateness`, recommendation: "For family law lead gen, Search campaigns are primary. Flag Performance Max, Display, Demand Gen, and YouTube for review — they often drive lower-quality leads" };
+    const nsItems = nonSearch.map((c: any) => `Campaign "${c.campaign?.name ?? 'Unnamed'}" — ${c.campaign?.advertisingChannelType} (non-Search)`);
+    return { result: "warning", details: entityDetails(nsItems), recommendation: "For family law lead gen, Search campaigns are primary. Flag Performance Max, Display, Demand Gen, and YouTube for review — they often drive lower-quality leads" };
   }),
 
   // G07 — Search + PMax brand overlap
@@ -800,7 +831,14 @@ const structureChecks: CheckFn[] = [
       return budget > 0 && spend >= budget * 0.95;
     });
     if (budgetLimited.length === 0) return { result: "pass", details: "Top-performing campaigns are not budget-limited", recommendation: "" };
-    return { result: "fail", details: `${budgetLimited.length} top-performing campaigns are hitting budget caps`, recommendation: "Reallocate budget from lower-performing campaigns to top performers that are budget-constrained" };
+    const blItems = budgetLimited.map((c: any) => {
+      const name = c.campaign?.name ?? "Unknown";
+      const budget = microsToValue(c.campaignBudget?.amountMicros);
+      const spend = microsToValue(c.metrics?.costMicros);
+      const convs = Number(c.metrics?.conversions ?? 0);
+      return `Campaign "${name}" — budget $${budget.toFixed(0)}/day, spending $${spend.toFixed(0)} (${convs.toFixed(0)} conversions)`;
+    });
+    return { result: "fail", details: entityDetails(blItems), recommendation: "Reallocate budget from lower-performing campaigns to top performers that are budget-constrained" };
   }),
 
   // G09 — Campaign daily budget utilization
@@ -814,7 +852,8 @@ const structureChecks: CheckFn[] = [
       return budget > 0 && spend >= budget * 0.98;
     });
     if (capped.length === 0) return { result: "pass", details: "No campaigns hitting budget caps", recommendation: "" };
-    return { result: "warning", details: `${capped.length} campaigns reaching daily budget cap`, recommendation: "Increase budget for capped campaigns or consolidate to ensure ads show throughout the day" };
+    const capItems = capped.map((c: any) => `Campaign "${c.campaign?.name ?? 'Unknown'}" — at ${(safeDiv(microsToValue(c.metrics?.costMicros), microsToValue(c.campaignBudget?.amountMicros)) * 100).toFixed(0)}% of $${microsToValue(c.campaignBudget?.amountMicros).toFixed(0)}/day budget`);
+    return { result: "warning", details: entityDetails(capItems), recommendation: "Increase budget for capped campaigns or consolidate to ensure ads show throughout the day" };
   }),
 
   // G10 — Ad schedule configured (now automated via API)
@@ -842,7 +881,15 @@ const structureChecks: CheckFn[] = [
       c.campaign?.geoTargetTypeSetting?.positiveGeoTargetType === "PRESENCE"
     );
     if (hasPresenceOnly && !hasPresenceOrInterest) return { result: "pass", details: "Location targeting set to 'Presence' — users in your locations", recommendation: "" };
-    if (hasPresenceOrInterest) return { result: "fail", details: "Location targeting includes 'Interest' — may serve ads to users NOT in your area", recommendation: "Switch to 'Presence: People in your targeted locations' to avoid irrelevant clicks from outside your service area" };
+    if (hasPresenceOrInterest) {
+      const poiCamps = campaigns.filter((c: any) =>
+        c.campaign?.geoTargetTypeSetting?.positiveGeoTargetType === "SEARCH_INTEREST" ||
+        c.campaign?.geoTargetTypeSetting?.positiveGeoTargetType === "PRESENCE_OR_INTEREST"
+      );
+      const poiItems = poiCamps.slice(0, 5).map((c: any) => `Campaign "${c.campaign?.name ?? 'Unknown'}" — targeting set to '${c.campaign?.geoTargetTypeSetting?.positiveGeoTargetType}' (should be PRESENCE)`);
+      if (poiCamps.length > 5) poiItems.push(`…and ${poiCamps.length - 5} more`);
+      return { result: "fail", details: entityDetails(poiItems), recommendation: "Switch to 'Presence: People in your targeted locations' to avoid irrelevant clicks from outside your service area" };
+    }
     return { result: "manual", details: "Location targeting setting could not be verified — manual check recommended", recommendation: "Verify location targeting is set to 'Presence' not 'Presence or Interest'" };
   }),
 
@@ -853,8 +900,14 @@ const structureChecks: CheckFn[] = [
     if (search.length === 0) return { result: "skipped", details: "No active search campaigns", recommendation: "" };
     const displayOn = search.filter((c: any) => c.campaign?.networkSettings?.targetContentNetwork === true);
     const partnersOn = search.filter((c: any) => c.campaign?.networkSettings?.targetSearchNetwork === true);
-    if (displayOn.length > 0) return { result: "fail", details: `${displayOn.length} search campaigns have Display Network ON — this wastes budget`, recommendation: "Disable Display Network on all Search campaigns immediately — use separate Display/PMax for display inventory" };
-    if (partnersOn.length > 0) return { result: "warning", details: `${partnersOn.length} search campaigns have Search Partners ON — monitor performance`, recommendation: "Compare Search Partners vs Google Search performance — disable partners if CPA is >50% higher" };
+    if (displayOn.length > 0) {
+      const dispItems = displayOn.map((c: any) => `Campaign "${c.campaign?.name ?? 'Unknown'}" — Display Network is ON (wastes Search budget)`);
+      return { result: "fail", details: entityDetails(dispItems), recommendation: "Disable Display Network on all Search campaigns immediately — use separate Display/PMax for display inventory" };
+    }
+    if (partnersOn.length > 0) {
+      const partItems = partnersOn.map((c: any) => `Campaign "${c.campaign?.name ?? 'Unknown'}" — Search Partners enabled (monitor performance)`);
+      return { result: "warning", details: entityDetails(partItems), recommendation: "Compare Search Partners vs Google Search performance — disable partners if CPA is >50% higher" };
+    }
     return { result: "pass", details: "Search campaigns have Display Network disabled and Partners monitored", recommendation: "" };
   }),
 
@@ -865,22 +918,26 @@ const structureChecks: CheckFn[] = [
     const researchTerms = /\b(how to|what is|can i|do i need|laws|rights|process|cost of|average|timeline|stages|when to|should i)\b/i;
     const buyerTerms = /\b(attorney|lawyer|law firm|hire|best|top|find|near me|consultation|free consult)\b/i;
     // Group keywords by ad group
-    const adGroupKWs = new Map<string, string[]>();
+    const adGroupKWs = new Map<string, { name: string; texts: string[] }>();
     for (const k of keywords) {
       const agId = String(k.adGroup?.id ?? "unknown");
+      const agName = k.adGroup?.name ?? "Unknown";
       const text = k.adGroupCriterion?.keyword?.text ?? "";
-      if (!adGroupKWs.has(agId)) adGroupKWs.set(agId, []);
-      adGroupKWs.get(agId)!.push(text);
+      if (!adGroupKWs.has(agId)) adGroupKWs.set(agId, { name: agName, texts: [] });
+      adGroupKWs.get(agId)!.texts.push(text);
     }
-    const mixedGroups: string[] = [];
-    for (const [agId, kws] of adGroupKWs) {
-      const hasResearch = kws.some((kw) => researchTerms.test(kw));
-      const hasBuyer = kws.some((kw) => buyerTerms.test(kw));
-      if (hasResearch && hasBuyer) mixedGroups.push(agId);
+    const mixedGroups: { name: string; researchSample: string; buyerSample: string }[] = [];
+    for (const [, group] of adGroupKWs) {
+      const researchKws = group.texts.filter((kw) => researchTerms.test(kw));
+      const buyerKws = group.texts.filter((kw) => buyerTerms.test(kw));
+      if (researchKws.length > 0 && buyerKws.length > 0) {
+        mixedGroups.push({ name: group.name, researchSample: researchKws[0], buyerSample: buyerKws[0] });
+      }
     }
     if (mixedGroups.length === 0) return { result: "pass", details: "No ad groups mixing research and buyer intent keywords", recommendation: "" };
-    if (mixedGroups.length <= 2) return { result: "warning", details: `${mixedGroups.length} ad groups mix research intent (how to, what is) with buyer intent (attorney, lawyer)`, recommendation: "Separate research-intent keywords (how to file, custody laws, divorce process) from buyer-intent keywords (divorce attorney, hire lawyer) into different ad groups for better ad relevance" };
-    return { result: "fail", details: `${mixedGroups.length} ad groups mix research and buyer intent — hurts ad relevance and QS`, recommendation: "Restructure immediately: research keywords (how to, what is, rights, laws) should be in separate ad groups from buyer keywords (attorney, lawyer, hire, best). This directly impacts Quality Score and conversion rates" };
+    const mixedItems = mixedGroups.map(g => `Ad Group "${g.name}" — mixes research ("${g.researchSample}") with buyer intent ("${g.buyerSample}")`);
+    if (mixedGroups.length <= 2) return { result: "warning", details: entityDetails(mixedItems), recommendation: "Separate research-intent keywords (how to file, custody laws, divorce process) from buyer-intent keywords (divorce attorney, hire lawyer) into different ad groups for better ad relevance" };
+    return { result: "fail", details: entityDetails(mixedItems), recommendation: "Restructure immediately: research keywords (how to, what is, rights, laws) should be in separate ad groups from buyer keywords (attorney, lawyer, hire, best). This directly impacts Quality Score and conversion rates" };
   }),
 
   // FL04 — Broad match keyword isolation
@@ -890,10 +947,19 @@ const structureChecks: CheckFn[] = [
     const broad = keywords.filter((k: any) => k.adGroupCriterion?.keyword?.matchType === "BROAD");
     if (broad.length === 0) return { result: "pass", details: "No broad match keywords in use", recommendation: "" };
     // Check if broad match is mixed with phrase/exact in same ad group
-    const broadAGs = new Set(broad.map((k: any) => String(k.adGroup?.id)));
-    const nonBroad = keywords.filter((k: any) => k.adGroupCriterion?.keyword?.matchType !== "BROAD" && broadAGs.has(String(k.adGroup?.id)));
-    if (nonBroad.length === 0) return { result: "pass", details: `${broad.length} broad match keywords properly isolated in their own ad groups`, recommendation: "" };
-    return { result: "fail", details: `Broad match keywords are mixed with phrase/exact match in the same ad groups (${broadAGs.size} groups affected)`, recommendation: "Isolate broad match keywords into their own ad groups or campaigns. Mixing match types causes broad match to cannibalize exact/phrase match traffic" };
+    const broadAGs = new Map<string, string>();
+    for (const k of broad) {
+      const agId = String(k.adGroup?.id);
+      if (!broadAGs.has(agId)) broadAGs.set(agId, k.adGroup?.name ?? "Unknown");
+    }
+    const mixedAGs: string[] = [];
+    for (const [agId, agName] of broadAGs) {
+      const hasNonBroad = keywords.some((k: any) => String(k.adGroup?.id) === agId && k.adGroupCriterion?.keyword?.matchType !== "BROAD");
+      if (hasNonBroad) mixedAGs.push(agName);
+    }
+    if (mixedAGs.length === 0) return { result: "pass", details: `${broad.length} broad match keywords properly isolated in their own ad groups`, recommendation: "" };
+    const mixItems = mixedAGs.map(name => `Ad Group "${name}" — broad match mixed with phrase/exact match keywords`);
+    return { result: "fail", details: entityDetails(mixItems), recommendation: "Isolate broad match keywords into their own ad groups or campaigns. Mixing match types causes broad match to cannibalize exact/phrase match traffic" };
   }),
 ];
 
@@ -924,8 +990,11 @@ const keywordChecks: CheckFn[] = [
     const lowQS = scored.filter((k: any) => k.adGroupCriterion.qualityInfo.qualityScore <= 3);
     const pct = safeDiv(lowQS.length, scored.length) * 100;
     if (pct < 10) return { result: "pass", details: `Only ${pct.toFixed(0)}% of keywords have QS ≤3`, recommendation: "" };
-    if (pct < 25) return { result: "warning", details: `${pct.toFixed(0)}% of keywords have QS ≤3 — needs attention`, recommendation: "Improve ad copy and landing pages for keywords with QS ≤3" };
-    return { result: "fail", details: `${pct.toFixed(0)}% of keywords have critically low QS ≤3`, recommendation: "Pause or fix keywords with QS ≤3 — they drastically increase CPC. Rewrite ads and improve landing page relevance" };
+    const lowItems = lowQS
+      .sort((a: any, b: any) => microsToValue(b.metrics?.costMicros) - microsToValue(a.metrics?.costMicros))
+      .map((k: any) => `Keyword "${k.adGroupCriterion?.keyword?.text ?? '?'}" in Ad Group "${k.adGroup?.name ?? 'Unknown'}" — QS ${k.adGroupCriterion.qualityInfo.qualityScore}`);
+    if (pct < 25) return { result: "warning", details: entityDetails(lowItems), recommendation: "Improve ad copy and landing pages for keywords with QS ≤3" };
+    return { result: "fail", details: entityDetails(lowItems), recommendation: "Pause or fix keywords with QS ≤3 — they drastically increase CPC. Rewrite ads and improve landing page relevance" };
   }),
 
   // G22 — Expected CTR component
@@ -973,8 +1042,9 @@ const keywordChecks: CheckFn[] = [
     const top20 = sorted.slice(0, Math.min(20, sorted.length));
     const lowQS = top20.filter((k: any) => k.adGroupCriterion.qualityInfo.qualityScore < 7);
     if (lowQS.length === 0) return { result: "pass", details: `All top ${top20.length} spending keywords have QS ≥7`, recommendation: "" };
-    if (lowQS.length <= 5) return { result: "warning", details: `${lowQS.length} of top ${top20.length} spending keywords have QS <7`, recommendation: "Focus optimization on your highest-spend keywords — improving QS from 5→7 can reduce CPC by 20%+" };
-    return { result: "fail", details: `${lowQS.length} of top ${top20.length} spending keywords have QS <7 — overpaying for traffic`, recommendation: "Prioritize QS improvement for top keywords: rewrite ads, improve landing pages, tighten ad group themes" };
+    const lowItems = lowQS.map((k: any) => `Keyword "${k.adGroupCriterion?.keyword?.text ?? '?'}" in Ad Group "${k.adGroup?.name ?? 'Unknown'}" — QS ${k.adGroupCriterion.qualityInfo.qualityScore}, $${microsToValue(k.metrics?.costMicros).toFixed(0)} spend`);
+    if (lowQS.length <= 5) return { result: "warning", details: entityDetails(lowItems), recommendation: "Focus optimization on your highest-spend keywords — improving QS from 5→7 can reduce CPC by 20%+" };
+    return { result: "fail", details: entityDetails(lowItems), recommendation: "Prioritize QS improvement for top keywords: rewrite ads, improve landing pages, tighten ad group themes" };
   }),
 
   // G-KW1 — Zero-impression keywords
@@ -985,8 +1055,9 @@ const keywordChecks: CheckFn[] = [
     const zeroImp = active.filter((k: any) => Number(k.metrics?.impressions ?? 0) === 0);
     const pct = safeDiv(zeroImp.length, active.length) * 100;
     if (pct < 5) return { result: "pass", details: `Only ${pct.toFixed(0)}% of active keywords have zero impressions`, recommendation: "" };
-    if (pct < 10) return { result: "warning", details: `${zeroImp.length} active keywords (${pct.toFixed(0)}%) with zero impressions`, recommendation: "Review and pause keywords with zero impressions — they may have low search volume or be outcompeted" };
-    return { result: "fail", details: `${zeroImp.length} active keywords (${pct.toFixed(0)}%) with zero impressions — account bloat`, recommendation: "Pause zero-impression keywords to reduce account complexity and focus budget on performing terms" };
+    const zeroItems = zeroImp.map((k: any) => `Keyword "${k.adGroupCriterion?.keyword?.text ?? '?'}" in Ad Group "${k.adGroup?.name ?? 'Unknown'}" — zero impressions`);
+    if (pct < 10) return { result: "warning", details: entityDetails(zeroItems), recommendation: "Review and pause keywords with zero impressions — they may have low search volume or be outcompeted" };
+    return { result: "fail", details: entityDetails(zeroItems), recommendation: "Pause zero-impression keywords to reduce account complexity and focus budget on performing terms" };
   }),
 
   // G-KW2 — Keyword-to-ad headline relevance
@@ -1030,8 +1101,10 @@ const adsChecks: CheckFn[] = [
     const covered = activeAGs.filter((ag: any) => rsaAGs.has(String(ag.adGroup?.id))).length;
     const pct = safeDiv(covered, activeAGs.length) * 100;
     if (pct >= 90) return { result: "pass", details: `${pct.toFixed(0)}% of ad groups have RSAs`, recommendation: "" };
-    if (pct >= 60) return { result: "warning", details: `Only ${pct.toFixed(0)}% of ad groups have RSAs`, recommendation: "Add at least 1 RSA to every ad group — Google recommends 2+ per group" };
-    return { result: "fail", details: `Only ${pct.toFixed(0)}% of ad groups have RSAs — many groups without ads`, recommendation: "Create RSAs for all active ad groups — ad groups without RSAs cannot serve ads effectively" };
+    const missingAGs = activeAGs.filter((ag: any) => !rsaAGs.has(String(ag.adGroup?.id)));
+    const missingItems = missingAGs.map((ag: any) => `Ad Group "${ag.adGroup?.name ?? 'Unknown'}" — no RSA found`);
+    if (pct >= 60) return { result: "warning", details: entityDetails(missingItems), recommendation: "Add at least 1 RSA to every ad group — Google recommends 2+ per group" };
+    return { result: "fail", details: entityDetails(missingItems), recommendation: "Create RSAs for all active ad groups — ad groups without RSAs cannot serve ads effectively" };
   }),
 
   // G27 — RSA headline count (≥8, ideal 12-15)
@@ -1042,8 +1115,9 @@ const adsChecks: CheckFn[] = [
     const underserved = rsas.filter((a: any) => (a.adGroupAd.ad.responsiveSearchAd.headlines?.length ?? 0) < 8);
     const pct = safeDiv(underserved.length, rsas.length) * 100;
     if (pct < 20) return { result: "pass", details: `${(100 - pct).toFixed(0)}% of RSAs have ≥8 headlines`, recommendation: "" };
-    if (pct < 50) return { result: "warning", details: `${underserved.length}/${rsas.length} RSAs have <8 headlines`, recommendation: "Add more unique headlines to RSAs — aim for 12-15 headlines per RSA for maximum testing" };
-    return { result: "fail", details: `${underserved.length}/${rsas.length} RSAs have <8 headlines — limiting ad combinations`, recommendation: "Add 12-15 unique headlines per RSA. Include keyword variants, benefits, CTAs, and social proof" };
+    const underItems = underserved.map((a: any) => `RSA in Ad Group "${a.adGroup?.name ?? 'Unknown'}" — ${a.adGroupAd.ad.responsiveSearchAd.headlines?.length ?? 0} headlines (need ≥8)`);
+    if (pct < 50) return { result: "warning", details: entityDetails(underItems), recommendation: "Add more unique headlines to RSAs — aim for 12-15 headlines per RSA for maximum testing" };
+    return { result: "fail", details: entityDetails(underItems), recommendation: "Add 12-15 unique headlines per RSA. Include keyword variants, benefits, CTAs, and social proof" };
   }),
 
   // G28 — RSA description count (≥3, ideal 4)
@@ -1053,7 +1127,8 @@ const adsChecks: CheckFn[] = [
     if (rsas.length === 0) return { result: "skipped", details: "No RSAs found", recommendation: "" };
     const under = rsas.filter((a: any) => (a.adGroupAd.ad.responsiveSearchAd.descriptions?.length ?? 0) < 3);
     if (under.length === 0) return { result: "pass", details: `All ${rsas.length} RSAs have ≥3 descriptions`, recommendation: "" };
-    return { result: "warning", details: `${under.length}/${rsas.length} RSAs have <3 descriptions`, recommendation: "Add 4 unique descriptions per RSA covering benefits, features, CTAs, and social proof" };
+    const underItems = under.map((a: any) => `RSA in Ad Group "${a.adGroup?.name ?? 'Unknown'}" — ${a.adGroupAd.ad.responsiveSearchAd.descriptions?.length ?? 0} descriptions (need ≥3)`);
+    return { result: "warning", details: entityDetails(underItems), recommendation: "Add 4 unique descriptions per RSA covering benefits, features, CTAs, and social proof" };
   }),
 
   // G29 — RSA Ad Strength (Good/Excellent)
@@ -1064,9 +1139,14 @@ const adsChecks: CheckFn[] = [
     const good = rsas.filter((a: any) => ["GOOD", "EXCELLENT"].includes(a.adGroupAd?.adStrength ?? ""));
     const poor = rsas.filter((a: any) => a.adGroupAd?.adStrength === "POOR");
     const pct = safeDiv(good.length, rsas.length) * 100;
-    if (poor.length > 0) return { result: "fail", details: `${poor.length} RSAs with POOR ad strength — ${pct.toFixed(0)}% are Good/Excellent`, recommendation: "Improve poor RSAs: add more unique headlines/descriptions, vary messaging, and avoid repetition" };
+    if (poor.length > 0) {
+      const poorItems = poor.map((a: any) => `RSA in Ad Group "${a.adGroup?.name ?? 'Unknown'}" — POOR ad strength`);
+      return { result: "fail", details: entityDetails(poorItems), recommendation: "Improve poor RSAs: add more unique headlines/descriptions, vary messaging, and avoid repetition" };
+    }
     if (pct >= 70) return { result: "pass", details: `${pct.toFixed(0)}% of RSAs have Good/Excellent strength`, recommendation: "" };
-    return { result: "warning", details: `Only ${pct.toFixed(0)}% of RSAs have Good/Excellent strength`, recommendation: "Improve RSA ad strength by adding unique headlines, varying descriptions, and including keyword variants" };
+    const avgRsas = rsas.filter((a: any) => a.adGroupAd?.adStrength === "AVERAGE");
+    const avgItems = avgRsas.map((a: any) => `RSA in Ad Group "${a.adGroup?.name ?? 'Unknown'}" — AVERAGE ad strength`);
+    return { result: "warning", details: entityDetails(avgItems), recommendation: "Improve RSA ad strength by adding unique headlines, varying descriptions, and including keyword variants" };
   }),
 
   // G30 — RSA pinning strategy
@@ -1080,7 +1160,8 @@ const adsChecks: CheckFn[] = [
       return pinned > 3;
     });
     if (overPinned.length === 0) return { result: "pass", details: "RSA pinning is reasonable — allowing Google to optimize rotations", recommendation: "" };
-    return { result: "warning", details: `${overPinned.length} RSAs have excessive pinning (>3 positions pinned)`, recommendation: "Reduce pinning to 1-2 positions max. Over-pinning limits Google's ability to find winning combinations" };
+    const opItems = overPinned.map((a: any) => `RSA in Ad Group "${a.adGroup?.name ?? 'Unknown'}" — ${(a.adGroupAd.ad.responsiveSearchAd.headlines ?? []).filter((h: any) => h.pinnedField).length} headlines pinned (max 3)`);
+    return { result: "warning", details: entityDetails(opItems), recommendation: "Reduce pinning to 1-2 positions max. Over-pinning limits Google's ability to find winning combinations" };
   }),
 
   // G31 — PMax asset group density (now automated via API)
@@ -1111,10 +1192,10 @@ const adsChecks: CheckFn[] = [
       if (descriptions < 5) missing.push(`descriptions: ${descriptions}/5`);
       if (videos < 3) missing.push(`videos: ${videos}/5`);
       if (logos < 3) missing.push(`logos: ${logos}/5`);
-      if (missing.length > 0) issues.push(`${groupName}: ${missing.join(", ")}`);
+      if (missing.length > 0) issues.push(`Asset Group "${groupName}" — ${missing.join(", ")}`);
     }
     if (issues.length === 0) return { result: "pass", details: "All PMax asset groups have adequate density", recommendation: "" };
-    return { result: "fail", details: `Asset density gaps: ${issues.join("; ")}`, recommendation: "Fill all asset slots: 20 images, 5 logos, 5+ videos (16:9, 1:1, 9:16), 5 headlines, 5 descriptions" };
+    return { result: "fail", details: entityDetails(issues), recommendation: "Fill all asset slots: 20 images, 5 logos, 5+ videos (16:9, 1:1, 9:16), 5 headlines, 5 descriptions" };
   }),
 
   // G32 — PMax video assets present
@@ -1137,7 +1218,8 @@ const adsChecks: CheckFn[] = [
     }
     const single = pmaxCampaigns.filter((c: any) => (groupsPerCampaign.get(String(c.campaign?.id)) ?? 0) < 2);
     if (single.length === 0) return { result: "pass", details: `All PMax campaigns have ≥2 asset groups`, recommendation: "" };
-    return { result: "warning", details: `${single.length} PMax campaigns have only 1 asset group`, recommendation: "Create ≥2 intent-segmented asset groups per PMax campaign for better audience targeting" };
+    const singleItems = single.map((c: any) => `Campaign "${c.campaign?.name ?? 'Unknown'}" — only ${groupsPerCampaign.get(String(c.campaign?.id)) ?? 0} asset group(s)`);
+    return { result: "warning", details: entityDetails(singleItems), recommendation: "Create ≥2 intent-segmented asset groups per PMax campaign for better audience targeting" };
   }),
 
   // G34 — PMax final URL expansion setting
@@ -1214,8 +1296,9 @@ const adsChecks: CheckFn[] = [
     const weak = assetGroups.filter((ag: any) => ["POOR", "AVERAGE"].includes(ag.assetGroup?.adStrength ?? ""));
     const good = assetGroups.filter((ag: any) => ["GOOD", "EXCELLENT"].includes(ag.assetGroup?.adStrength ?? ""));
     if (weak.length === 0) return { result: "pass", details: `All ${assetGroups.length} asset groups have Good/Excellent ad strength`, recommendation: "" };
-    if (good.length > weak.length) return { result: "warning", details: `${weak.length}/${assetGroups.length} asset groups with weak ad strength`, recommendation: "Add more diverse assets to improve PMax ad strength — aim for 20 images, 5 videos, 15 headlines" };
-    return { result: "fail", details: `${weak.length}/${assetGroups.length} asset groups have Poor/Average strength`, recommendation: "Urgently improve PMax assets: add more images, videos, headlines, and descriptions to maximize coverage" };
+    const weakItems = weak.map((ag: any) => `Asset Group "${ag.assetGroup?.name ?? 'Unknown'}" — ${ag.assetGroup?.adStrength ?? 'Unknown'} ad strength`);
+    if (good.length > weak.length) return { result: "warning", details: entityDetails(weakItems), recommendation: "Add more diverse assets to improve PMax ad strength — aim for 20 images, 5 videos, 15 headlines" };
+    return { result: "fail", details: entityDetails(weakItems), recommendation: "Urgently improve PMax assets: add more images, videos, headlines, and descriptions to maximize coverage" };
   }),
 
   // G-PM3 — PMax brand cannibalization
@@ -1282,8 +1365,9 @@ const settingsChecks: CheckFn[] = [
     );
     if (manual.length === 0) return { result: "pass", details: "All campaigns using automated bidding", recommendation: "" };
     const pct = safeDiv(manual.length, active.length) * 100;
-    if (pct < 30) return { result: "warning", details: `${manual.length} campaigns still on manual bidding (${pct.toFixed(0)}%)`, recommendation: "Migrate to Smart Bidding (Target CPA/ROAS) when you have ≥30 conversions per month" };
-    return { result: "fail", details: `${pct.toFixed(0)}% of campaigns on manual bidding`, recommendation: "Switch to Smart Bidding for better performance — Google's AI needs automated bidding to optimize effectively" };
+    const manualItems = manual.map((c: any) => `Campaign "${c.campaign?.name ?? 'Unknown'}" — ${c.campaign?.biddingStrategyType} (manual bidding)`);
+    if (pct < 30) return { result: "warning", details: entityDetails(manualItems), recommendation: "Migrate to Smart Bidding (Target CPA/ROAS) when you have ≥30 conversions per month" };
+    return { result: "fail", details: entityDetails(manualItems), recommendation: "Switch to Smart Bidding for better performance — Google's AI needs automated bidding to optimize effectively" };
   }),
 
   // G37 — Target CPA/ROAS reasonableness
@@ -1299,7 +1383,12 @@ const settingsChecks: CheckFn[] = [
       return targetCPA > 0 && actualCPA > 0 && (actualCPA > targetCPA * 1.5 || targetCPA < actualCPA * 0.5);
     });
     if (violations.length === 0) return { result: "pass", details: "Target CPA/ROAS aligned with historical performance", recommendation: "" };
-    return { result: "warning", details: `${violations.length} campaigns with targets >50% off actual performance`, recommendation: "Set targets within 20% of 30-day historical CPA — aggressive targets restrict delivery" };
+    const vioItems = violations.map((c: any) => {
+      const target = microsToValue(c.campaign?.targetCpa?.targetCpaMicros);
+      const actual = microsToValue(c.metrics?.costPerConversion);
+      return `Campaign "${c.campaign?.name ?? 'Unknown'}" — target CPA $${target.toFixed(0)} vs actual $${actual.toFixed(0)}`;
+    });
+    return { result: "warning", details: entityDetails(vioItems), recommendation: "Set targets within 20% of 30-day historical CPA — aggressive targets restrict delivery" };
   }),
 
   // G38 — Learning phase status
@@ -1315,8 +1404,9 @@ const settingsChecks: CheckFn[] = [
     });
     const pct = safeDiv(lowConv.length, active.length) * 100;
     if (pct < 25) return { result: "pass", details: `${pct.toFixed(0)}% of campaigns likely in learning phase`, recommendation: "" };
-    if (pct < 40) return { result: "warning", details: `${pct.toFixed(0)}% of campaigns may be in learning/limited phase`, recommendation: "Consolidate low-volume campaigns to exit learning phase — need ~50 conversions per 30 days" };
-    return { result: "fail", details: `${pct.toFixed(0)}% of campaigns in learning — too many campaigns with insufficient data`, recommendation: "Reduce campaign count and consolidate conversion data. Smart Bidding needs volume to optimize effectively" };
+    const lcItems = lowConv.map((c: any) => `Campaign "${c.campaign?.name ?? 'Unknown'}" — ${Number(c.metrics?.conversions ?? 0).toFixed(0)} conversions (need ≥50/30d)`);
+    if (pct < 40) return { result: "warning", details: entityDetails(lcItems), recommendation: "Consolidate low-volume campaigns to exit learning phase — need ~50 conversions per 30 days" };
+    return { result: "fail", details: entityDetails(lcItems), recommendation: "Reduce campaign count and consolidate conversion data. Smart Bidding needs volume to optimize effectively" };
   }),
 
   // G39 — Budget constrained campaigns
@@ -1332,7 +1422,8 @@ const settingsChecks: CheckFn[] = [
       return budget > 0 && spend >= budget * 0.95;
     });
     if (limited.length === 0) return { result: "pass", details: "Top-performing campaigns have adequate budget", recommendation: "" };
-    return { result: "fail", details: `${limited.length} top-performing campaigns are budget-limited`, recommendation: "Increase budget for top converters — every dollar constrained here moves to lower-ROAS campaigns" };
+    const limItems = limited.map((c: any) => `Campaign "${c.campaign?.name ?? 'Unknown'}" — spending $${microsToValue(c.metrics?.costMicros).toFixed(0)} of $${microsToValue(c.campaignBudget?.amountMicros).toFixed(0)} budget (${Number(c.metrics?.conversions ?? 0).toFixed(0)} conversions)`);
+    return { result: "fail", details: entityDetails(limItems), recommendation: "Increase budget for top converters — every dollar constrained here moves to lower-ROAS campaigns" };
   }),
 
   // G40 — Manual CPC justification
@@ -1344,7 +1435,8 @@ const settingsChecks: CheckFn[] = [
       c.campaign?.status === "ENABLED"
     );
     if (manualWithVolume.length === 0) return { result: "pass", details: "No high-volume campaigns on Manual CPC", recommendation: "" };
-    return { result: "fail", details: `${manualWithVolume.length} campaigns with >30 conversions still on Manual CPC`, recommendation: "Switch campaigns with >30 conv/month to Smart Bidding — they have enough data for automation" };
+    const mwvItems = manualWithVolume.map((c: any) => `Campaign "${c.campaign?.name ?? 'Unknown'}" — ${Number(c.metrics?.conversions ?? 0).toFixed(0)} conversions on Manual CPC`);
+    return { result: "fail", details: entityDetails(mwvItems), recommendation: "Switch campaigns with >30 conv/month to Smart Bidding — they have enough data for automation" };
   }),
 
   // G41 — Portfolio bid strategies
@@ -1357,7 +1449,8 @@ const settingsChecks: CheckFn[] = [
       !["MANUAL_CPC", "MANUAL_CPV"].includes(c.campaign?.biddingStrategyType ?? "")
     );
     if (lowVolume.length < 2) return { result: "pass", details: "Few low-volume Smart Bidding campaigns — portfolio not needed", recommendation: "" };
-    return { result: "warning", details: `${lowVolume.length} low-volume campaigns (<15 conv) running independently`, recommendation: "Group low-volume campaigns into portfolio bid strategies to pool conversion data for better optimization" };
+    const lvItems = lowVolume.map((c: any) => `Campaign "${c.campaign?.name ?? 'Unknown'}" — ${Number(c.metrics?.conversions ?? 0).toFixed(0)} conversions (low volume)`);
+    return { result: "warning", details: entityDetails(lvItems), recommendation: "Group low-volume campaigns into portfolio bid strategies to pool conversion data for better optimization" };
   }),
 
   // ── Extensions & Assets ──
@@ -1543,7 +1636,9 @@ const settingsChecks: CheckFn[] = [
       ch.changeEvent?.clientType === "GOOGLE_ADS_RECOMMENDATIONS"
     );
     if (autoApplied.length === 0) return { result: "pass", details: "No auto-applied recommendation changes detected in last 14 days", recommendation: "" };
-    return { result: "fail", details: `${autoApplied.length} auto-applied changes detected — Auto-Apply Recommendations may be enabled`, recommendation: "Disable ALL Auto-Apply Recommendations immediately. Google's auto-apply can add broad keywords, change bids, and modify budgets without your consent. Review all recent auto-applied changes and revert where needed" };
+    const aaTypes = [...new Set(autoApplied.map((ch: any) => ch.changeEvent?.changeResourceType ?? "Unknown"))];
+    const aaItems = aaTypes.map(t => `Auto-Applied Change — ${t} modification (${autoApplied.filter((ch: any) => (ch.changeEvent?.changeResourceType ?? "Unknown") === t).length} changes)`);
+    return { result: "fail", details: entityDetails(aaItems), recommendation: "Disable ALL Auto-Apply Recommendations immediately. Google's auto-apply can add broad keywords, change bids, and modify budgets without your consent. Review all recent auto-applied changes and revert where needed" };
   }),
 
   // ST02 — Disapproved ads flagged
@@ -1554,7 +1649,13 @@ const settingsChecks: CheckFn[] = [
       a.adGroupAd?.policySummary?.approvalStatus === "DISAPPROVED"
     );
     if (disapproved.length === 0) return { result: "pass", details: "No disapproved ads detected in active ad groups", recommendation: "" };
-    return { result: "fail", details: `${disapproved.length} disapproved ads in active campaigns — these are not serving`, recommendation: "Fix disapproved ads immediately. Review policy violations (legal advertising rules vary by state), correct ad copy, and resubmit for approval" };
+    const daItems = disapproved.map((a: any) => {
+      const agName = a.adGroup?.name ?? "Unknown";
+      const adId = a.adGroupAd?.ad?.id ?? "?";
+      const reason = a.adGroupAd?.policySummary?.policyTopicEntries?.[0]?.topic ?? "Unknown policy violation";
+      return `Ad #${adId} in Ad Group "${agName}" — disapproved (${reason})`;
+    });
+    return { result: "fail", details: entityDetails(daItems), recommendation: "Fix disapproved ads immediately. Review policy violations (legal advertising rules vary by state), correct ad copy, and resubmit for approval" };
   }),
 
   // ST03 — Language setting = English (now automated via API)
@@ -1612,8 +1713,14 @@ const settingsChecks: CheckFn[] = [
     }
     const shared = [...budgetCounts.entries()].filter(([, count]) => count > 1);
     if (shared.length === 0) return { result: "pass", details: "All campaigns have individual budgets", recommendation: "" };
-    const sharedCampaignCount = shared.reduce((sum, [, count]) => sum + count, 0);
-    return { result: "warning", details: `${sharedCampaignCount} campaigns share ${shared.length} budget(s) — budget allocation is not independently controlled`, recommendation: "Remove shared budgets and assign individual budgets to each campaign. Shared budgets let Google shift spend unpredictably between campaigns, often favoring lower-value traffic" };
+    const sharedItems: string[] = [];
+    for (const [budgetId, count] of shared) {
+      const campsOnBudget = active.filter((c: any) => (c.campaign?.campaignBudget ?? "") === budgetId);
+      const names = campsOnBudget.slice(0, 3).map((c: any) => `"${c.campaign?.name ?? 'Unknown'}"`).join(", ");
+      const extra = campsOnBudget.length > 3 ? ` and ${campsOnBudget.length - 3} more` : "";
+      sharedItems.push(`Shared Budget — ${count} campaigns: ${names}${extra}`);
+    }
+    return { result: "warning", details: entityDetails(sharedItems), recommendation: "Remove shared budgets and assign individual budgets to each campaign. Shared budgets let Google shift spend unpredictably between campaigns, often favoring lower-value traffic" };
   }),
 
   // ST07 — Sitelink count and quality (now automated via API)

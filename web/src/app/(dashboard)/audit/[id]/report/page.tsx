@@ -1406,11 +1406,12 @@ export default function AuditReportPage() {
 
                       if (!hasDetails) return [mainRow];
 
-                      // Split details by common delimiters: semicolons, " — ", or newlines
-                      const detailItems = check.details!
-                        .split(/;\s*|(?:\s—\s)|\n/)
-                        .map((d) => d.trim())
-                        .filter((d) => d.length > 0);
+                      // Split details: prefer newline-delimited (entity-level items);
+                      // fall back to semicolons for legacy aggregate strings
+                      const detailItems = (check.details!.includes('\n')
+                        ? check.details!.split('\n')
+                        : check.details!.split(/;\s*/)
+                      ).map((d) => d.trim()).filter((d) => d.length > 0);
 
                       const detailRows = detailItems.map((detail, di) => (
                         <tr

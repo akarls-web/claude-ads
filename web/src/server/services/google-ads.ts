@@ -199,6 +199,7 @@ export class GoogleAdsService {
         ad_group_criterion.quality_info.post_click_quality_score,
         ad_group_criterion.status,
         ad_group.id,
+        ad_group.name,
         campaign.id,
         campaign.name,
         campaign.bidding_strategy_type,

@@ -870,7 +870,13 @@ function pageSummaryMatrix(
     const ck = checks[i];
     const hasDetails = (ck.result === "fail" || ck.result === "warning" || ck.result === "manual") && ck.details;
     const rowH = 14;
-    const detailH = hasDetails ? 12 : 0;
+
+    // Split entity-level details: prefer newlines, fallback to semicolons, cap at 3 for PDF space
+    const detailLines: string[] = hasDetails
+      ? (ck.details!.includes('\n') ? ck.details!.split('\n') : ck.details!.split(/;\s*/))
+          .map(d => d.trim()).filter(d => d.length > 0).slice(0, 3)
+      : [];
+    const detailH = detailLines.length * 10;
     const totalH = rowH + detailH;
 
     if (y + totalH > CONTENT_BOTTOM) {
@@ -897,11 +903,13 @@ function pageSummaryMatrix(
     doc.font("Helvetica-Bold").fontSize(6.5).fillColor(sc);
     doc.text(statusLabel(ck.result), cols[3].x + 3, y + 3, { width: cols[3].w - 6 });
 
-    // Details sub-row for fail/warning/manual checks
-    if (hasDetails) {
+    // Details sub-rows for fail/warning/manual checks
+    if (detailLines.length > 0) {
       doc.font("Helvetica").fontSize(5.5).fillColor(B.textMuted);
-      const detailText = truncate(ck.details!, 160);
-      doc.text(`↳ ${detailText}`, cols[1].x + 3, y + rowH + 1, { width: CW - cols[1].x + ML - 6 });
+      for (let di = 0; di < detailLines.length; di++) {
+        const detailText = truncate(detailLines[di], 140);
+        doc.text(`↳ ${detailText}`, cols[1].x + 3, y + rowH + 1 + di * 10, { width: CW - cols[1].x + ML - 6 });
+      }
     }
 
     y += totalH;
