@@ -16,6 +16,8 @@ import {
   Building2,
   Users,
   Tag,
+  Globe,
+  RefreshCw,
 } from "lucide-react";
 import { useState } from "react";
 import { useSearchParams } from "next/navigation";
@@ -243,6 +245,7 @@ export default function ConnectPage() {
     onError: (err) => setMccAddResult(`Error: ${err.message}`),
   });
   const runAudit = trpc.audit.run.useMutation();
+  const runSeoAudit = trpc.audit.runSeo.useMutation();
 
   const [selectedClientId, setSelectedClientId] = useState<string | "">("");
   const [auditTypeMap, setAuditTypeMap] = useState<Record<string, string>>({});
@@ -253,6 +256,10 @@ export default function ConnectPage() {
   const [manualError, setManualError] = useState<string | null>(null);
   const [manualSuccess, setManualSuccess] = useState(false);
   const [mccAddResult, setMccAddResult] = useState<string | null>(null);
+  const [seoUrl, setSeoUrl] = useState("");
+  const [seoClientId, setSeoClientId] = useState<string | "">("");
+  const [seoRunning, setSeoRunning] = useState(false);
+  const [seoError, setSeoError] = useState<string | null>(null);
 
   const mccId = process.env.NEXT_PUBLIC_GOOGLE_ADS_LOGIN_CUSTOMER_ID ?? "";
 
@@ -294,6 +301,34 @@ export default function ConnectPage() {
       window.location.href = `/audit/${result.audit.id}`;
     } catch {
       setRunningFor(null);
+    }
+  };
+
+  const handleRunSeoAudit = async () => {
+    setSeoError(null);
+    const rawUrl = seoUrl.trim();
+    if (!rawUrl) {
+      setSeoError("Enter a website URL to audit");
+      return;
+    }
+    let url = rawUrl;
+    if (!/^https?:\/\//i.test(url)) url = `https://${url}`;
+    try {
+      new URL(url);
+    } catch {
+      setSeoError("Enter a valid URL (e.g. example.com)");
+      return;
+    }
+    setSeoRunning(true);
+    try {
+      const result = await runSeoAudit.mutateAsync({
+        websiteUrl: url,
+        clientId: seoClientId || undefined,
+      });
+      window.location.href = `/audit/${result.audit.id}`;
+    } catch (e: unknown) {
+      setSeoError(e instanceof Error ? e.message : "SEO audit failed");
+      setSeoRunning(false);
     }
   };
 
@@ -657,6 +692,72 @@ export default function ConnectPage() {
           })}
         </div>
       )}
+
+      {/* ─── SEO Website Audit ─── */}
+      <div className="rounded-lg border border-border-light bg-white shadow-sm">
+        <div className="border-b border-border-light px-5 py-4">
+          <div className="flex items-center gap-2">
+            <Globe className="h-5 w-5 text-brand" strokeWidth={1.75} />
+            <h2 className="text-h3 font-semibold text-text-primary">
+              SEO Website Audit
+            </h2>
+          </div>
+          <p className="mt-1 text-small text-text-secondary">
+            Enter any website URL to run a comprehensive SEO audit — no
+            connection required
+          </p>
+        </div>
+
+        <div className="px-5 py-4 space-y-4">
+          <div className="flex flex-col sm:flex-row gap-3">
+            <input
+              type="url"
+              placeholder="https://example.com"
+              value={seoUrl}
+              onChange={(e) => {
+                setSeoUrl(e.target.value);
+                setSeoError(null);
+              }}
+              className="flex-1 rounded-md border border-border-light bg-white px-3 py-2 text-body text-text-primary placeholder:text-text-placeholder outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2"
+            />
+            {clientsList.length > 0 && (
+              <select
+                value={seoClientId}
+                onChange={(e) => setSeoClientId(e.target.value)}
+                className="rounded-md border border-border-light bg-white px-3 py-2 text-small text-text-primary outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2"
+              >
+                <option value="">No client</option>
+                {clientsList.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            )}
+            <button
+              onClick={handleRunSeoAudit}
+              disabled={seoRunning || !seoUrl.trim()}
+              className="inline-flex items-center gap-2 rounded-md bg-brand px-4 py-2 text-small font-medium text-white shadow-sm hover:bg-brand-light transition-colors disabled:opacity-50 disabled:cursor-not-allowed focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2"
+            >
+              {seoRunning ? (
+                <>
+                  <RefreshCw className="h-4 w-4 animate-spin" strokeWidth={1.75} />
+                  Running…
+                </>
+              ) : (
+                <>
+                  <Globe className="h-4 w-4" strokeWidth={1.75} />
+                  Run SEO Audit
+                </>
+              )}
+            </button>
+          </div>
+
+          {seoError && (
+            <p className="text-small text-red-600">{seoError}</p>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

@@ -3,9 +3,10 @@ import { eq, and, desc } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { router, protectedProcedure } from "../trpc";
 import { db } from "../db";
-import { audits, auditChecks, connections } from "../db/schema";
+import { audits, auditChecks, connections, clients } from "../db/schema";
 import { GoogleAdsService } from "../services/google-ads";
 import { runAudit } from "../services/audit-engine";
+import { runSeoAudit } from "../services/seo-engine";
 import { generateAIAnalysis } from "../services/ai-analysis";
 
 const REPORT_PREFIX: Record<string, string> = {
@@ -41,10 +42,14 @@ export const auditRouter = router({
         clientId: audits.clientId,
         customerId: connections.externalId,
         customerName: connections.accountName,
+        clientName: clients.name,
+        clientWebsite: clients.website,
+        rawData: audits.rawData,
         createdAt: audits.createdAt,
       })
       .from(audits)
       .leftJoin(connections, eq(audits.connectionId, connections.id))
+      .leftJoin(clients, eq(audits.clientId, clients.id))
       .where(eq(audits.userId, ctx.userId))
       .orderBy(desc(audits.createdAt))
       .limit(50);
@@ -268,6 +273,152 @@ export const auditRouter = router({
         throw new TRPCError({
           code: "INTERNAL_SERVER_ERROR",
           message: `Audit failed: ${err instanceof Error ? err.message : "Unknown error"}`,
+        });
+      }
+    }),
+
+  /** Run an SEO audit on a website URL (no connection required) */
+  runSeo: protectedProcedure
+    .input(
+      z.object({
+        websiteUrl: z.string().min(3),
+        clientId: z.string().uuid().optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const reportId = generateReportId("seo");
+
+      // If clientId provided, verify ownership
+      if (input.clientId) {
+        const [client] = await db
+          .select()
+          .from(clients)
+          .where(
+            and(
+              eq(clients.id, input.clientId),
+              eq(clients.userId, ctx.userId)
+            )
+          );
+        if (!client) {
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Client not found",
+          });
+        }
+      }
+
+      // Create audit record (no connection — website-based)
+      const [audit] = await db
+        .insert(audits)
+        .values({
+          userId: ctx.userId,
+          clientId: input.clientId ?? null,
+          connectionId: null,
+          auditType: "seo",
+          reportId,
+          status: "running",
+          startedAt: new Date(),
+        })
+        .returning();
+
+      try {
+        // Run SEO engine
+        const report = await runSeoAudit({
+          websiteUrl: input.websiteUrl,
+        });
+
+        // Save check results
+        const checkInserts = report.checks.map((c) => ({
+          auditId: audit.id,
+          checkId: c.checkId,
+          category: c.category,
+          description: c.description,
+          result: c.result as "pass" | "warning" | "fail" | "skipped",
+          severity: c.severity as "critical" | "high" | "medium" | "low",
+          details: c.details,
+          recommendation: c.recommendation,
+          isQuickWin: c.isQuickWin,
+          estimatedFixMinutes: c.estimatedFixMinutes,
+        }));
+
+        if (checkInserts.length > 0) {
+          await db.insert(auditChecks).values(checkInserts);
+        }
+
+        // Build lightweight data summary
+        const dataSummary = {
+          websiteUrl: input.websiteUrl,
+          fetchedAt: new Date().toISOString(),
+          categoryScores: report.categoryScores,
+        };
+
+        // Run AI-powered narrative analysis
+        const aiAnalysis = await generateAIAnalysis({
+          customerName: input.websiteUrl,
+          customerId: input.websiteUrl,
+          score: report.score,
+          grade: report.grade,
+          totalChecks: report.totalChecks,
+          passCount: report.passCount,
+          warningCount: report.warningCount,
+          failCount: report.failCount,
+          skippedCount: report.skippedCount,
+          manualCount: report.manualCount,
+          categoryScores: report.categoryScores,
+          checks: report.checks.map((c) => ({
+            checkId: c.checkId,
+            category: c.category,
+            description: c.description,
+            result: c.result,
+            severity: c.severity,
+            details: c.details,
+            recommendation: c.recommendation,
+            isQuickWin: c.isQuickWin,
+          })),
+          dataCounts: {},
+        });
+
+        // Update audit with results
+        const [updatedAudit] = await db
+          .update(audits)
+          .set({
+            status: "completed",
+            score: report.score,
+            grade: report.grade as "A" | "B" | "C" | "D" | "F",
+            totalChecks: report.totalChecks,
+            passCount: report.passCount,
+            warningCount: report.warningCount,
+            failCount: report.failCount,
+            skippedCount: report.skippedCount,
+            manualCount: report.manualCount,
+            summary: report.summary,
+            rawData: dataSummary,
+            aiAnalysis,
+            completedAt: new Date(),
+            updatedAt: new Date(),
+          })
+          .where(eq(audits.id, audit.id))
+          .returning();
+
+        return {
+          audit: updatedAudit,
+          report,
+        };
+      } catch (err) {
+        console.error("[audit.runSeo] FAILED:", err);
+        await db
+          .update(audits)
+          .set({
+            status: "failed",
+            summary: `SEO audit failed: ${err instanceof Error ? err.message : "Unknown error"}`,
+            completedAt: new Date(),
+            updatedAt: new Date(),
+          })
+          .where(eq(audits.id, audit.id));
+
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: `SEO audit failed: ${err instanceof Error ? err.message : "Unknown error"}`,
         });
       }
     }),

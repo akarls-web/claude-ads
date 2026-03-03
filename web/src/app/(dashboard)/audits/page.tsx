@@ -84,7 +84,11 @@ export default function AuditsPage() {
                     </Link>
                   </td>
                   <td className="px-4 py-3 text-small text-text-secondary">
-                    {audit.customerName ?? audit.customerId}
+                    {audit.customerName
+                      ?? audit.customerId
+                      ?? (audit.rawData as { websiteUrl?: string } | null)?.websiteUrl
+                      ?? audit.clientName
+                      ?? "—"}
                   </td>
                   <td className="px-4 py-3 text-center">
                     <span className="inline-block rounded-full bg-brand-wash px-2 py-0.5 text-caption font-medium text-brand">
