@@ -868,16 +868,19 @@ function pageSummaryMatrix(
 
   for (let i = 0; i < checks.length; i++) {
     const ck = checks[i];
+    const hasDetails = (ck.result === "fail" || ck.result === "warning" || ck.result === "manual") && ck.details;
     const rowH = 14;
+    const detailH = hasDetails ? 12 : 0;
+    const totalH = rowH + detailH;
 
-    if (y + rowH > CONTENT_BOTTOM) {
+    if (y + totalH > CONTENT_BOTTOM) {
       doc.addPage(); // pageAdded event handles hf() + pg.v++
       y = CONTENT_TOP;
       y = tHead(doc, y, cols);
     }
 
     const bg = i % 2 === 1 ? B.accentWash : undefined;
-    if (bg) doc.rect(ML, y, CW, rowH).fill(bg);
+    if (bg) doc.rect(ML, y, CW, totalH).fill(bg);
 
     const abbr = abbrMap[ck.category] ?? ck.category.slice(0, 10);
     const sc = statusColor(ck.result);
@@ -894,7 +897,14 @@ function pageSummaryMatrix(
     doc.font("Helvetica-Bold").fontSize(6.5).fillColor(sc);
     doc.text(statusLabel(ck.result), cols[3].x + 3, y + 3, { width: cols[3].w - 6 });
 
-    y += rowH;
+    // Details sub-row for fail/warning/manual checks
+    if (hasDetails) {
+      doc.font("Helvetica").fontSize(5.5).fillColor(B.textMuted);
+      const detailText = truncate(ck.details!, 160);
+      doc.text(`↳ ${detailText}`, cols[1].x + 3, y + rowH + 1, { width: CW - cols[1].x + ML - 6 });
+    }
+
+    y += totalH;
   }
 }
 

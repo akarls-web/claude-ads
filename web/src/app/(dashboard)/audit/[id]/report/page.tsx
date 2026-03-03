@@ -1348,6 +1348,9 @@ export default function AuditReportPage() {
                     <th className="px-4 py-3 text-left text-caption font-bold uppercase tracking-wider">
                       Description
                     </th>
+                    <th className="px-4 py-3 text-left text-caption font-bold uppercase tracking-wider">
+                      Details
+                    </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border-light">
@@ -1397,6 +1400,13 @@ export default function AuditReportPage() {
                         </td>
                         <td className="max-w-sm px-4 py-2.5 text-caption text-text-primary">
                           {check.description}
+                        </td>
+                        <td className="max-w-md px-4 py-2.5 text-caption text-text-secondary">
+                          {(check.result === "fail" || check.result === "warning" || check.result === "manual") && check.details ? (
+                            <span className="leading-relaxed">{check.details}</span>
+                          ) : check.result === "pass" ? (
+                            <span className="text-text-placeholder italic">—</span>
+                          ) : null}
                         </td>
                       </tr>
                     ))}
