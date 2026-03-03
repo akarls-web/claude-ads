@@ -1,9 +1,9 @@
 import { z } from "zod";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, desc, sql } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { router, protectedProcedure } from "../trpc";
 import { db } from "../db";
-import { clients } from "../db/schema";
+import { clients, audits, connections } from "../db/schema";
 
 export const clientRouter = router({
   /** List all active clients for the current user */
@@ -124,5 +124,83 @@ export const clientRouter = router({
       }
 
       return updated;
+    }),
+
+  /** Get aggregated stats for a client — latest audit per type + counts */
+  stats: protectedProcedure
+    .input(z.object({ id: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      // Verify client belongs to user
+      const [client] = await db
+        .select({ id: clients.id })
+        .from(clients)
+        .where(
+          and(eq(clients.id, input.id), eq(clients.userId, ctx.userId))
+        );
+
+      if (!client) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Client not found" });
+      }
+
+      // Get all completed audits for this client
+      const clientAudits = await db
+        .select({
+          id: audits.id,
+          auditType: audits.auditType,
+          score: audits.score,
+          grade: audits.grade,
+          status: audits.status,
+          createdAt: audits.createdAt,
+        })
+        .from(audits)
+        .where(
+          and(
+            eq(audits.clientId, input.id),
+            eq(audits.userId, ctx.userId)
+          )
+        )
+        .orderBy(desc(audits.createdAt));
+
+      // Get connection count
+      const connRows = await db
+        .select({ cnt: sql<number>`count(*)::int` })
+        .from(connections)
+        .where(
+          and(
+            eq(connections.clientId, input.id),
+            eq(connections.userId, ctx.userId),
+            eq(connections.isActive, true)
+          )
+        );
+
+      // Build per-type scorecard: latest completed audit per type
+      const typeMap = new Map<
+        string,
+        { auditType: string; score: number | null; grade: string | null; auditId: string; date: Date; totalAudits: number }
+      >();
+
+      for (const a of clientAudits) {
+        const t = a.auditType;
+        const existing = typeMap.get(t);
+        if (existing) {
+          existing.totalAudits++;
+        } else {
+          typeMap.set(t, {
+            auditType: t,
+            score: a.status === "completed" ? a.score : null,
+            grade: a.status === "completed" ? a.grade : null,
+            auditId: a.id,
+            date: a.createdAt,
+            totalAudits: 1,
+          });
+        }
+      }
+
+      return {
+        connectionCount: connRows[0]?.cnt ?? 0,
+        totalAudits: clientAudits.length,
+        completedAudits: clientAudits.filter((a) => a.status === "completed").length,
+        scorecard: Array.from(typeMap.values()),
+      };
     }),
 });

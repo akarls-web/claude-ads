@@ -8,15 +8,27 @@ import {
   ShieldCheck,
   ArrowRight,
   Loader2,
+  Building2,
+  Plus,
 } from "lucide-react";
-import { formatScore, gradeColor } from "@/lib/utils";
+import { formatScore, gradeColor, gradeBg } from "@/lib/utils";
+
+const AUDIT_TYPE_LABELS: Record<string, string> = {
+  google_ads: "Google Ads",
+  meta_ads: "Meta Ads",
+  seo: "SEO",
+  local_seo: "Local SEO",
+  ai_visibility: "AI Visibility",
+};
 
 export default function DashboardPage() {
   const accounts = trpc.account.list.useQuery();
   const audits = trpc.audit.list.useQuery();
+  const clientsQuery = trpc.clients.list.useQuery();
 
   const hasAccounts = (accounts.data?.length ?? 0) > 0;
   const recentAudits = audits.data?.slice(0, 5) ?? [];
+  const clientsList = clientsQuery.data ?? [];
 
   return (
     <div className="mx-auto max-w-4xl space-y-8">
@@ -63,7 +75,7 @@ export default function DashboardPage() {
           </h2>
           <p className="mt-1 text-small text-text-secondary">
             {hasAccounts
-              ? "Run a full 74-check audit on a connected account"
+              ? "Run a comprehensive multi-type audit on a connected account"
               : "Connect an account first to run audits"}
           </p>
           {hasAccounts ? (
@@ -80,6 +92,103 @@ export default function DashboardPage() {
             </span>
           )}
         </div>
+      </div>
+
+      {/* Clients overview */}
+      <div>
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="text-h3 font-semibold text-text-primary">
+            Clients
+          </h2>
+          <Link
+            href="/clients"
+            className="text-small font-medium text-brand hover:text-brand-light transition-colors"
+          >
+            View all &rarr;
+          </Link>
+        </div>
+
+        {clientsQuery.isLoading ? (
+          <div className="flex items-center justify-center rounded-lg border border-border-light bg-white p-8">
+            <Loader2 className="h-5 w-5 animate-spin text-brand" />
+          </div>
+        ) : clientsList.length === 0 ? (
+          <div className="flex items-center gap-4 rounded-lg border border-dashed border-border-light bg-white p-6">
+            <div className="rounded-md bg-brand-wash p-2.5 text-brand">
+              <Building2 className="h-5 w-5" strokeWidth={1.75} />
+            </div>
+            <div className="flex-1">
+              <p className="text-body font-medium text-text-secondary">
+                No clients yet
+              </p>
+              <p className="mt-0.5 text-small text-text-placeholder">
+                Add a client to organize connections and audits by business
+              </p>
+            </div>
+            <Link
+              href="/clients/new"
+              className="inline-flex items-center gap-1.5 rounded-md bg-brand px-4 py-2 text-small font-semibold text-white hover:bg-brand-light transition-colors"
+            >
+              <Plus className="h-4 w-4" strokeWidth={1.75} />
+              Add Client
+            </Link>
+          </div>
+        ) : (
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {clientsList.slice(0, 6).map((client) => {
+              // Find latest completed audit for this client
+              const latestAudit = (audits.data ?? []).find(
+                (a) =>
+                  (a as { clientId?: string }).clientId === client.id &&
+                  a.status === "completed"
+              );
+              return (
+                <Link
+                  key={client.id}
+                  href={`/clients/${client.id}`}
+                  className="group rounded-lg border border-border-light bg-white p-5 shadow-sm transition-all hover:border-brand hover:shadow-md"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="rounded-md bg-brand-wash p-2 text-brand">
+                      <Building2 className="h-4 w-4" strokeWidth={1.75} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-small font-semibold text-text-primary truncate">
+                        {client.name}
+                      </p>
+                      {client.industry && (
+                        <p className="text-caption text-text-placeholder truncate">
+                          {client.industry}
+                        </p>
+                      )}
+                    </div>
+                    {latestAudit?.grade && (
+                      <span
+                        className={`inline-flex h-7 w-7 items-center justify-center rounded-full text-caption font-bold ${gradeBg(latestAudit.grade)}`}
+                      >
+                        {latestAudit.grade}
+                      </span>
+                    )}
+                  </div>
+                  {latestAudit?.score !== undefined && latestAudit?.score !== null ? (
+                    <div className="mt-3 flex items-baseline gap-1.5">
+                      <span className="text-h2 font-bold tracking-tight text-text-primary">
+                        {formatScore(latestAudit.score)}
+                      </span>
+                      <span className="text-caption text-text-placeholder">
+                        latest score
+                      </span>
+                    </div>
+                  ) : (
+                    <p className="mt-3 text-caption text-text-placeholder">
+                      No audits yet
+                    </p>
+                  )}
+                </Link>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* Recent audits */}

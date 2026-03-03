@@ -17,8 +17,17 @@ import {
   Link2,
   ClipboardList,
   ArrowRight,
+  ShieldCheck,
 } from "lucide-react";
-import { formatScore, gradeColor } from "@/lib/utils";
+import { formatScore, gradeColor, gradeBg } from "@/lib/utils";
+
+const AUDIT_TYPE_LABELS: Record<string, string> = {
+  google_ads: "Google Ads",
+  meta_ads: "Meta Ads",
+  seo: "SEO",
+  local_seo: "Local SEO",
+  ai_visibility: "AI Visibility",
+};
 
 export default function ClientDetailPage({
   params,
@@ -30,6 +39,7 @@ export default function ClientDetailPage({
   const utils = trpc.useUtils();
 
   const client = trpc.clients.get.useQuery({ id });
+  const stats = trpc.clients.stats.useQuery({ id });
   const audits = trpc.audit.list.useQuery();
   const accounts = trpc.account.list.useQuery();
 
@@ -294,6 +304,71 @@ export default function ClientDetailPage({
           </p>
         </div>
       )}
+
+      {/* Scorecard */}
+      <div>
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="text-h3 font-semibold text-text-primary">
+            Scorecard
+          </h2>
+          {stats.data && (
+            <p className="text-caption text-text-placeholder">
+              {stats.data.completedAudits} audit{stats.data.completedAudits !== 1 ? "s" : ""} completed
+              &middot; {stats.data.connectionCount} connection{stats.data.connectionCount !== 1 ? "s" : ""}
+            </p>
+          )}
+        </div>
+
+        {stats.isLoading ? (
+          <div className="flex items-center justify-center rounded-lg border border-border-light bg-white p-8">
+            <Loader2 className="h-5 w-5 animate-spin text-brand" />
+          </div>
+        ) : !stats.data?.scorecard.length ? (
+          <div className="flex flex-col items-center rounded-lg border border-dashed border-border-light bg-white p-8 text-center">
+            <ShieldCheck
+              className="mb-2 h-6 w-6 text-text-placeholder"
+              strokeWidth={1.75}
+            />
+            <p className="text-small text-text-secondary">
+              No audits completed yet — run an audit to see scores
+            </p>
+          </div>
+        ) : (
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {stats.data.scorecard.map((s) => (
+              <Link
+                key={s.auditType}
+                href={`/audit/${s.auditId}`}
+                className="group rounded-lg border border-border-light bg-white p-5 shadow-sm transition-all hover:border-brand hover:shadow-md"
+              >
+                <div className="flex items-center justify-between">
+                  <p className="text-caption font-medium uppercase tracking-wider text-text-secondary">
+                    {AUDIT_TYPE_LABELS[s.auditType] ?? s.auditType}
+                  </p>
+                  {s.grade && (
+                    <span
+                      className={`inline-flex h-8 w-8 items-center justify-center rounded-full text-small font-bold ${gradeBg(s.grade)}`}
+                    >
+                      {s.grade}
+                    </span>
+                  )}
+                </div>
+                {s.score !== null ? (
+                  <p className="mt-2 text-display font-bold tracking-tight text-text-primary">
+                    {formatScore(s.score)}
+                  </p>
+                ) : (
+                  <p className="mt-2 text-body text-text-placeholder">—</p>
+                )}
+                <p className="mt-1 text-caption text-text-placeholder">
+                  {s.totalAudits} audit{s.totalAudits !== 1 ? "s" : ""} &middot;{" "}
+                  {new Date(s.date).toLocaleDateString()}
+                </p>
+              </Link>
+            ))}
+          </div>
+        )}
+      </div>
 
       {/* Connected Accounts */}
       <div>
