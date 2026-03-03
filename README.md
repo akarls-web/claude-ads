@@ -1,12 +1,15 @@
 <p align="center">
-  <img src="assets/banner.png" alt="Claude Ads" width="100%">
+  <img src="assets/banner.png" alt="SterlingX Paid Ads Audit" width="100%">
 </p>
 
-# Claude Ads
+# SterlingX Paid Ads Audit
 
-Comprehensive paid advertising audit and optimization skill for Claude Code. Covers Google Ads, Meta Ads, YouTube Ads, LinkedIn Ads, TikTok Ads, and Microsoft Ads with 190 audit checks, industry-specific templates, and parallel subagent delegation.
+> **Powered by SterlingX** — Comprehensive paid advertising audit and optimization skill for Claude Code.
+
+Covers Google Ads, Meta Ads, YouTube Ads, LinkedIn Ads, TikTok Ads, and Microsoft Ads with 190 audit checks, industry-specific templates, and parallel subagent delegation. Customized for **SterlingX** agency workflows.
 
 [![Claude Code Skill](https://img.shields.io/badge/Claude%20Code-Skill-blue)](https://claude.ai/claude-code)
+[![SterlingX](https://img.shields.io/badge/SterlingX-Agency-543D5E)](https://github.com/akarls-web)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 ## Installation
@@ -14,20 +17,20 @@ Comprehensive paid advertising audit and optimization skill for Claude Code. Cov
 ### One-Command Install (Unix/macOS/Linux)
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/AgriciDaniel/claude-ads/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/akarls-web/claude-ads/main/install.sh | bash
 ```
 
 ### One-Command Install (Windows PowerShell)
 
 ```powershell
-irm https://raw.githubusercontent.com/AgriciDaniel/claude-ads/main/install.ps1 | iex
+irm https://raw.githubusercontent.com/akarls-web/claude-ads/main/install.ps1 | iex
 ```
 
 ### Manual Install
 
 ```bash
-git clone https://github.com/AgriciDaniel/claude-ads.git
-cd claude-ads
+git clone https://github.com/akarls-web/claude-ads.git "Paid Ads Audit"
+cd "Paid Ads Audit"
 ./install.sh          # Unix/macOS/Linux
 ```
 
@@ -181,18 +184,24 @@ Hard rules enforced during every audit:
 ### Unix/macOS/Linux
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/AgriciDaniel/claude-ads/main/uninstall.sh | bash
+curl -fsSL https://raw.githubusercontent.com/akarls-web/claude-ads/main/uninstall.sh | bash
 ```
 
 ### Windows PowerShell
 
 ```powershell
-irm https://raw.githubusercontent.com/AgriciDaniel/claude-ads/main/uninstall.ps1 | iex
+irm https://raw.githubusercontent.com/akarls-web/claude-ads/main/uninstall.ps1 | iex
 ```
 
-## Related Projects
+## Upstream
 
-- [Claude SEO](https://github.com/AgriciDaniel/claude-seo) — Comprehensive SEO analysis skill for Claude Code
+Forked from [claude-ads](https://github.com/AgriciDaniel/claude-ads) by [@AgriciDaniel](https://github.com/AgriciDaniel).
+
+To pull upstream updates:
+```bash
+git fetch upstream
+git merge upstream/main
+```
 
 ## License
 
@@ -200,4 +209,4 @@ MIT License - see [LICENSE](LICENSE) for details.
 
 ---
 
-Built for Claude Code by [@AgriciDaniel](https://github.com/AgriciDaniel)
+Customized for **SterlingX** by [@akarls-web](https://github.com/akarls-web) | Originally built by [@AgriciDaniel](https://github.com/AgriciDaniel)

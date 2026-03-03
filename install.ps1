@@ -1,9 +1,9 @@
 #Requires -Version 5.1
 <#
 .SYNOPSIS
-    Claude Ads Installer for Windows
+    SterlingX Paid Ads Audit Installer for Windows
 .DESCRIPTION
-    Installs the Claude Ads skill, sub-skills, agents, and reference files
+    Installs the SterlingX Paid Ads Audit skill, sub-skills, agents, and reference files
     for Claude Code on Windows systems.
 #>
 
@@ -12,10 +12,10 @@ $ErrorActionPreference = "Stop"
 function Main {
     $SkillDir = Join-Path $env:USERPROFILE ".claude\skills\ads"
     $AgentDir = Join-Path $env:USERPROFILE ".claude\agents"
-    $RepoUrl = "https://github.com/AgriciDaniel/claude-ads"
+    $RepoUrl = "https://github.com/akarls-web/claude-ads"
 
     Write-Host "=================================="
-    Write-Host "   Claude Ads - Installer"
+    Write-Host "   SterlingX Paid Ads Audit"
     Write-Host "   Claude Code Paid Ads Skill"
     Write-Host "=================================="
     Write-Host ""
@@ -33,7 +33,7 @@ function Main {
 
     # Clone to temp directory
     $TempDir = Join-Path $env:TEMP "claude-ads-install-$(Get-Random)"
-    Write-Host "Downloading Claude Ads..."
+    Write-Host "Downloading SterlingX Paid Ads Audit..."
 
     try {
         git clone --depth 1 $RepoUrl "$TempDir\claude-ads" 2>$null
@@ -75,7 +75,7 @@ function Main {
         }
 
         Write-Host ""
-        Write-Host "Claude Ads installed successfully!" -ForegroundColor Green
+        Write-Host "SterlingX Paid Ads Audit installed successfully!" -ForegroundColor Green
         Write-Host ""
         Write-Host "  Installed:"
         Write-Host "    - 1 main skill (ads orchestrator)"

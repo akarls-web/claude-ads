@@ -1,0 +1,19 @@
+# deps
+node_modules/
+
+# next.js
+.next/
+out/
+
+# env files (real keys must never be committed)
+.env
+.env.local
+.env.*.local
+
+# build
+dist/
+build/
+
+# misc
+.DS_Store
+*.tsbuildinfo

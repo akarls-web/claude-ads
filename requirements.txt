@@ -1,4 +1,4 @@
-# Claude Ads - Python Dependencies (optional, for live landing page analysis)
+# SterlingX Paid Ads Audit - Python Dependencies (optional, for live landing page analysis)
 # Bounded version pinning with security-conscious minimums
 # Last updated: February 11, 2026
 

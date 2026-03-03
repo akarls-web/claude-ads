@@ -26,6 +26,9 @@ node_modules/
 ADS-AUDIT-REPORT.md
 ADS-ACTION-PLAN.md
 ADS-QUICK-WINS.md
+SX-ADS-AUDIT-REPORT.md
+SX-ADS-ACTION-PLAN.md
+SX-ADS-QUICK-WINS.md
 GOOGLE-ADS-REPORT.md
 META-ADS-REPORT.md
 YOUTUBE-ADS-REPORT.md
@@ -43,3 +46,13 @@ screenshots/
 
 # Internal QA artifacts
 AUDIT-REPORT.md
+
+# Environment variables (real keys must never be committed)
+.env
+.env.local
+.env.*.local
+
+# Next.js
+web/.next/
+web/out/
+web/node_modules/

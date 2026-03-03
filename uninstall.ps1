@@ -1,16 +1,16 @@
 #Requires -Version 5.1
 <#
 .SYNOPSIS
-    Claude Ads Uninstaller for Windows
+    SterlingX Paid Ads Audit Uninstaller for Windows
 .DESCRIPTION
-    Removes the Claude Ads skill, sub-skills, agents, and reference files
+    Removes the SterlingX Paid Ads Audit skill, sub-skills, agents, and reference files
     from Claude Code on Windows systems.
 #>
 
 $ErrorActionPreference = "Stop"
 
 function Main {
-    Write-Host "→ Uninstalling Claude Ads..."
+    Write-Host "→ Uninstalling SterlingX Paid Ads Audit..."
 
     $ClaudeDir = Join-Path $env:USERPROFILE ".claude"
 
@@ -45,7 +45,7 @@ function Main {
         }
     }
 
-    Write-Host "✓ Claude Ads uninstalled." -ForegroundColor Green
+    Write-Host "✓ SterlingX Paid Ads Audit uninstalled." -ForegroundColor Green
 }
 
 Main

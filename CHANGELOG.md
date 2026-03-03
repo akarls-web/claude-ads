@@ -1,9 +1,29 @@
 # Changelog
 
-All notable changes to claude-ads are documented in this file.
+All notable changes to SterlingX Paid Ads Audit (forked from claude-ads) are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [2.0.0-sterlingx] - 2026-03-02
+
+### Added — SterlingX Agency Customization
+- Forked from [claude-ads](https://github.com/AgriciDaniel/claude-ads) v1.1.1
+- 15 SterlingX custom audit checks (SX01-SX15) in `ads/references/sterlingx-checks.md`
+  - SX01-SX05: Cross-platform governance (UTM taxonomy, attribution, naming conventions)
+  - SX06-SX10: Client reporting readiness (GA4, offline conversions, MER, pacing)
+  - SX11-SX15: Agency operations (access audit, billing, A/B test velocity, competitor monitoring)
+- Branded report templates with SterlingX header, Report ID format, and next steps section
+- CLAUDE.md project configuration
+- Upstream remote for pulling original repo updates
+
+### Changed
+- Rebranded all references from "Claude Ads" / "AgriciDaniel" to "SterlingX Paid Ads Audit"
+- Install/uninstall scripts point to fork (akarls-web/claude-ads)
+- User-Agent in fetch_page.py updated to SterlingXAds
+- Orchestrator skill updated with SterlingX report branding instructions
+- Audit total expanded from 190 base checks to 190 + 15 SterlingX = 205 checks
+- Scoring system updated with 15% SterlingX category weight
 
 ## [1.1.1] - 2026-02-11
 

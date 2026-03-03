@@ -1,16 +1,16 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Claude Ads Installer
+# SterlingX Paid Ads Audit Installer
 # Wraps everything in main() to prevent partial execution on network failure
 
 main() {
     SKILL_DIR="${HOME}/.claude/skills/ads"
     AGENT_DIR="${HOME}/.claude/agents"
-    REPO_URL="https://github.com/AgriciDaniel/claude-ads"
+    REPO_URL="https://github.com/akarls-web/claude-ads"
 
     echo "════════════════════════════════════════"
-    echo "║   Claude Ads - Installer             ║"
+    echo "║   SterlingX Paid Ads Audit           ║"
     echo "║   Claude Code Paid Ads Skill         ║"
     echo "════════════════════════════════════════"
     echo ""
@@ -27,7 +27,7 @@ main() {
     TEMP_DIR=$(mktemp -d)
     trap "rm -rf ${TEMP_DIR}" EXIT
 
-    echo "↓ Downloading Claude Ads..."
+    echo "↓ Downloading SterlingX Paid Ads Audit..."
     git clone --depth 1 "${REPO_URL}" "${TEMP_DIR}/claude-ads" 2>/dev/null
 
     # Copy main skill + references
@@ -64,7 +64,7 @@ main() {
     fi
 
     echo ""
-    echo "✓ Claude Ads installed successfully!"
+    echo "✓ SterlingX Paid Ads Audit installed successfully!"
     echo ""
     echo "  Installed:"
     echo "    • 1 main skill (ads orchestrator)"
