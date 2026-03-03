@@ -222,13 +222,46 @@ const conversionChecks: CheckFn[] = [
   // G-CT1 — No duplicate conversion counting
   check("G-CT1", "Conversion Tracking", "No duplicate conversion counting", "critical", 15, (d) => {
     const convs = d.conversions ?? [];
-    const names = convs.map((c: any) => (c.conversionAction?.name ?? "").toLowerCase()).filter(Boolean);
-    const seen = new Set<string>();
-    const dupes: string[] = [];
-    for (const n of names) { if (seen.has(n)) dupes.push(n); seen.add(n); }
-    if (dupes.length === 0) return { result: "pass", details: "No duplicate conversion names detected", recommendation: "" };
-    const dupeItems = [...new Set(dupes)].map(name => `Conversion Action "${name}" — duplicate detected`);
-    return { result: "fail", details: entityDetails(dupeItems), recommendation: "Remove or consolidate duplicate conversion actions to prevent double-counting" };
+    // Group conversion actions by lowercased name
+    const byName = new Map<string, any[]>();
+    for (const c of convs) {
+      const name = (c.conversionAction?.name ?? "").toLowerCase();
+      if (!name) continue;
+      if (!byName.has(name)) byName.set(name, []);
+      byName.get(name)!.push(c);
+    }
+    // Find names with more than one entry
+    const dupeGroups = [...byName.entries()].filter(([, group]) => group.length > 1);
+    if (dupeGroups.length === 0) return { result: "pass", details: "No duplicate conversion names detected", recommendation: "" };
+
+    // Build detailed diagnostic for each duplicate group
+    const dupeItems: string[] = [];
+    for (const [, group] of dupeGroups) {
+      for (const c of group) {
+        const ca = c.conversionAction ?? {};
+        const name = ca.name ?? "Unknown";
+        const resourceName = ca.resourceName ?? "";
+        // Extract numeric ID from resource name (e.g. customers/123/conversionActions/456 → 456)
+        const idMatch = resourceName.match(/conversionActions\/(\d+)/);
+        const actionId = idMatch ? idMatch[1] : "N/A";
+        const type = (ca.type ?? "UNKNOWN").replace(/_/g, " ");
+        const origin = (ca.origin ?? "UNKNOWN").replace(/_/g, " ");
+        const category = (ca.category ?? "UNKNOWN").replace(/_/g, " ");
+        const status = ca.status ?? "UNKNOWN";
+        const isPrimary = ca.includeInConversionsMetric === true ? "Primary" : "Secondary";
+        const countType = ca.countingType === "MANY_PER_CLICK" ? "Every" : ca.countingType === "ONE_PER_CLICK" ? "One" : (ca.countingType ?? "Unknown");
+        const model = ca.attributionModelSettings?.attributionModel ?? "Unknown";
+
+        dupeItems.push(
+          `"${name}" [ID: ${actionId}] — Type: ${type} | Origin: ${origin} | Category: ${category} | Status: ${status} | ${isPrimary} | Count: ${countType} | Attribution: ${model}`
+        );
+      }
+    }
+    return {
+      result: "fail",
+      details: entityDetails(dupeItems),
+      recommendation: "Remove or consolidate duplicate conversion actions to prevent double-counting. Compare the IDs above in Google Ads → Goals → Conversions → Summary. Keep the one actively receiving data and remove/set the other to Secondary",
+    };
   }),
 
   // G-CT2 — GA4 linked and flowing
