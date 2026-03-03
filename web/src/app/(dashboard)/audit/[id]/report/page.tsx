@@ -23,6 +23,7 @@ import {
   DollarSign,
   FileText,
   ArrowUp,
+  ClipboardList,
 } from "lucide-react";
 import { SterlingXLogo } from "@/components/ui/sterlingx-logo";
 
@@ -110,6 +111,7 @@ const resultClasses: Record<string, string> = {
   pass: "bg-emerald/10 text-emerald border-emerald/20",
   fail: "bg-signal/10 text-signal border-signal/20",
   warning: "bg-harvest/10 text-harvest border-harvest/20",
+  manual: "bg-purple-100 text-purple-700 border-purple-200",
   info: "bg-blue-50 text-blue-700 border-blue-200",
   "not-applicable": "bg-gray-50 text-gray-500 border-gray-200",
 };
@@ -390,6 +392,7 @@ export default function AuditReportPage() {
   const passCount = checks.filter((c) => c.result === "pass").length;
   const failCount = checks.filter((c) => c.result === "fail").length;
   const warnCount = checks.filter((c) => c.result === "warning").length;
+  const manualCount = checks.filter((c) => c.result === "manual").length;
 
   return (
     <>
@@ -538,6 +541,14 @@ export default function AuditReportPage() {
                 </p>
                 <p className="text-h2 font-bold text-harvest">{warnCount}</p>
               </div>
+              {manualCount > 0 && (
+                <div>
+                  <p className="text-caption font-medium text-text-placeholder">
+                    Manual
+                  </p>
+                  <p className="text-h2 font-bold text-purple-600">{manualCount}</p>
+                </div>
+              )}
             </div>
           </header>
 
@@ -653,6 +664,7 @@ export default function AuditReportPage() {
                 const catPass = catChecks.filter((c) => c.result === "pass").length;
                 const catFail = catChecks.filter((c) => c.result === "fail").length;
                 const catWarn = catChecks.filter((c) => c.result === "warning").length;
+                const catManual = catChecks.filter((c) => c.result === "manual").length;
                 const catScore = categoryScores[cat.key];
                 const catAnalysis = ai.categoryAnalyses?.find(
                   (ca) => ca.category === cat.key,
@@ -660,8 +672,8 @@ export default function AuditReportPage() {
 
                 // Sort: failures first, then by severity
                 const sorted = [...catChecks].sort((a, b) => {
-                  const aFail = a.result === "fail" ? 0 : a.result === "warning" ? 1 : 2;
-                  const bFail = b.result === "fail" ? 0 : b.result === "warning" ? 1 : 2;
+                  const aFail = a.result === "fail" ? 0 : a.result === "warning" ? 1 : a.result === "manual" ? 2 : 3;
+                  const bFail = b.result === "fail" ? 0 : b.result === "warning" ? 1 : b.result === "manual" ? 2 : 3;
                   if (aFail !== bFail) return aFail - bFail;
                   return (severityOrder[a.severity ?? "info"] ?? 4) -
                     (severityOrder[b.severity ?? "info"] ?? 4);
@@ -717,6 +729,12 @@ export default function AuditReportPage() {
                             <span className="flex items-center gap-1 text-caption font-medium text-harvest">
                               <AlertTriangle className="h-3.5 w-3.5" />
                               {catWarn}
+                            </span>
+                          )}
+                          {catManual > 0 && (
+                            <span className="flex items-center gap-1 text-caption font-medium text-purple-600">
+                              <ClipboardList className="h-3.5 w-3.5" />
+                              {catManual}
                             </span>
                           )}
                         </div>
@@ -789,7 +807,7 @@ export default function AuditReportPage() {
                                       </p>
                                     )}
                                     {check.recommendation &&
-                                      check.result === "fail" && (
+                                      (check.result === "fail" || check.result === "manual") && (
                                         <p className="mt-1 text-caption text-brand">
                                           💡 {check.recommendation}
                                         </p>
@@ -805,8 +823,9 @@ export default function AuditReportPage() {
                         {(() => {
                           const failedChecks = sorted.filter((c) => c.result === "fail");
                           const warnChecks = sorted.filter((c) => c.result === "warning");
-                          const issueChecks = [...failedChecks, ...warnChecks];
-                          const derivedFindings = issueChecks.map((c) => `[${c.checkId}] ${c.description}: ${c.details ?? (c.result === "fail" ? "Failed" : "Needs attention")}`);
+                          const manualChecks = sorted.filter((c) => c.result === "manual");
+                          const issueChecks = [...failedChecks, ...warnChecks, ...manualChecks];
+                          const derivedFindings = issueChecks.map((c) => `[${c.checkId}] ${c.description}: ${c.details ?? (c.result === "fail" ? "Failed" : c.result === "manual" ? "Manual review required" : "Needs attention")}`);
                           const derivedActions = issueChecks.filter((c) => c.recommendation).map((c) => c.recommendation!);
                           const derivedNarrative =
                             catFail > 0
@@ -893,13 +912,14 @@ export default function AuditReportPage() {
                   const catPass = catChecks.filter((c) => c.result === "pass").length;
                   const catFail = catChecks.filter((c) => c.result === "fail").length;
                   const catWarn = catChecks.filter((c) => c.result === "warning").length;
+                  const catManual = catChecks.filter((c) => c.result === "manual").length;
                   const catScore = categoryScores[cat];
                   const catAnalysis = ai.categoryAnalyses?.find(
                     (ca) => ca.category === cat,
                   );
                   const sorted = [...catChecks].sort((a, b) => {
-                    const aFail = a.result === "fail" ? 0 : a.result === "warning" ? 1 : 2;
-                    const bFail = b.result === "fail" ? 0 : b.result === "warning" ? 1 : 2;
+                    const aFail = a.result === "fail" ? 0 : a.result === "warning" ? 1 : a.result === "manual" ? 2 : 3;
+                    const bFail = b.result === "fail" ? 0 : b.result === "warning" ? 1 : b.result === "manual" ? 2 : 3;
                     if (aFail !== bFail) return aFail - bFail;
                     return (severityOrder[a.severity ?? "info"] ?? 4) -
                       (severityOrder[b.severity ?? "info"] ?? 4);
@@ -950,6 +970,12 @@ export default function AuditReportPage() {
                               <span className="flex items-center gap-1 text-caption font-medium text-harvest">
                                 <AlertTriangle className="h-3.5 w-3.5" />
                                 {catWarn}
+                              </span>
+                            )}
+                            {catManual > 0 && (
+                              <span className="flex items-center gap-1 text-caption font-medium text-purple-600">
+                                <ClipboardList className="h-3.5 w-3.5" />
+                                {catManual}
                               </span>
                             )}
                           </div>
@@ -1022,7 +1048,7 @@ export default function AuditReportPage() {
                                         </p>
                                       )}
                                       {check.recommendation &&
-                                        check.result === "fail" && (
+                                        (check.result === "fail" || check.result === "manual") && (
                                           <p className="mt-1 text-caption text-brand">
                                             💡 {check.recommendation}
                                           </p>
@@ -1038,8 +1064,9 @@ export default function AuditReportPage() {
                           {(() => {
                             const failedChecks = sorted.filter((c) => c.result === "fail");
                             const warnChecks = sorted.filter((c) => c.result === "warning");
-                            const issueChecks = [...failedChecks, ...warnChecks];
-                            const derivedFindings = issueChecks.map((c) => `[${c.checkId}] ${c.description}: ${c.details ?? (c.result === "fail" ? "Failed" : "Needs attention")}`);
+                            const manualChecks = sorted.filter((c) => c.result === "manual");
+                            const issueChecks = [...failedChecks, ...warnChecks, ...manualChecks];
+                            const derivedFindings = issueChecks.map((c) => `[${c.checkId}] ${c.description}: ${c.details ?? (c.result === "fail" ? "Failed" : c.result === "manual" ? "Manual review required" : "Needs attention")}`);
                             const derivedActions = issueChecks.filter((c) => c.recommendation).map((c) => c.recommendation!);
                             const derivedNarrative =
                               catFail > 0

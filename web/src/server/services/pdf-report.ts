@@ -32,6 +32,8 @@ const B = {
   yellowLight: "#FDF4DD",
   orange: "#E8913A",
   gray: "#6B7280",
+  purple: "#7C3AED",
+  purpleLight: "#EDE9FE",
   carbon: "#0A3449",
   fog: "#D7D5D6",
 };
@@ -113,17 +115,17 @@ interface AIAnalysis {
 // ─── Helpers ─────────────────────────────────────────────
 
 function statusColor(r: string): string {
-  const m: Record<string, string> = { pass: B.green, fail: B.red, warning: B.yellow, skipped: B.gray };
+  const m: Record<string, string> = { pass: B.green, fail: B.red, warning: B.yellow, skipped: B.gray, manual: B.purple };
   return m[r] ?? B.gray;
 }
 
 function statusBg(r: string): string {
-  const m: Record<string, string> = { pass: B.greenLight, fail: B.redLight, warning: B.yellowLight };
+  const m: Record<string, string> = { pass: B.greenLight, fail: B.redLight, warning: B.yellowLight, manual: B.purpleLight };
   return m[r] ?? "#F3F4F6";
 }
 
 function statusLabel(r: string): string {
-  const m: Record<string, string> = { pass: "PASS", fail: "FAIL", warning: "WARNING", skipped: "SKIPPED" };
+  const m: Record<string, string> = { pass: "PASS", fail: "FAIL", warning: "WARNING", skipped: "SKIPPED", manual: "MANUAL" };
   return m[r] ?? r.toUpperCase();
 }
 
@@ -375,6 +377,7 @@ function pageCover(doc: PDFKit.PDFDocument, a: AuditData["audit"]) {
     { label: "Passed", val: `${a.passCount ?? 0}`, c: B.green },
     { label: "Warnings", val: `${a.warningCount ?? 0}`, c: B.yellow },
     { label: "Failed", val: `${a.failCount ?? 0}`, c: B.red },
+    { label: "Manual", val: `${(a as Record<string, unknown>).manualCount ?? 0}`, c: B.purple },
     { label: "Skipped", val: `${a.skippedCount ?? 0}`, c: B.gray },
   ];
   const sw = CW / items.length;
@@ -564,8 +567,9 @@ function pageSection(
   const passed = list.filter((c) => c.result === "pass").length;
   const failed = list.filter((c) => c.result === "fail").length;
   const warned = list.filter((c) => c.result === "warning").length;
+  const manualCt = list.filter((c) => c.result === "manual").length;
   doc.font("Helvetica").fontSize(8).fillColor(B.textMuted);
-  doc.text(`${list.length} checks  |  ${passed} passed  |  ${warned} warnings  |  ${failed} failed`, ML, y);
+  doc.text(`${list.length} checks  |  ${passed} passed  |  ${warned} warnings  |  ${failed} failed${manualCt > 0 ? `  |  ${manualCt} manual` : ""}`, ML, y);
   y += 16;
 
   // ── Check | Status | Finding table ──

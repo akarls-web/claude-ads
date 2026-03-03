@@ -7,7 +7,7 @@
  * and enhanced settings & extensions checks (ST01-ST08).
  */
 
-export type CheckResult = "pass" | "warning" | "fail" | "skipped";
+export type CheckResult = "pass" | "warning" | "fail" | "skipped" | "manual";
 export type Severity = "critical" | "high" | "medium" | "low";
 export type Grade = "A" | "B" | "C" | "D" | "F";
 
@@ -31,6 +31,7 @@ export interface AuditReport {
   warningCount: number;
   failCount: number;
   skippedCount: number;
+  manualCount: number;
   checks: AuditCheckResult[];
   summary: string;
   quickWins: AuditCheckResult[];
@@ -141,7 +142,7 @@ const conversionChecks: CheckFn[] = [
   check("G45", "Conversion Tracking", "Consent Mode v2 (EU/EEA)", "critical", 30, (d) => {
     const account = d.account?.[0];
     if (!account) return { result: "skipped", details: "Unable to detect consent mode status", recommendation: "Verify Consent Mode v2 is implemented for EU/EEA compliance" };
-    return { result: "warning", details: "Cannot verify Consent Mode v2 remotely — manual check required", recommendation: "Ensure Consent Mode v2 is implemented with a supported CMP for GDPR compliance" };
+    return { result: "manual", details: "Cannot verify Consent Mode v2 remotely — manual check required", recommendation: "Ensure Consent Mode v2 is implemented with a supported CMP for GDPR compliance" };
   }),
 
   // G46 — Conversion window appropriate
@@ -342,7 +343,7 @@ const conversionChecks: CheckFn[] = [
     const convs = d.conversions ?? [];
     if (convs.length === 0) return { result: "skipped", details: "No conversions", recommendation: "" };
     // Custom Goals cannot be queried via API — flag for manual review
-    return { result: "warning", details: "Custom Goal configuration requires manual review", recommendation: "If campaigns use Custom Goals, verify they include all 3 required primary actions: Form Fill, Website Calls (via tracking), and Calls from Ads. Custom Goals should NOT include low-value actions" };
+    return { result: "manual", details: "Custom Goal configuration requires manual review", recommendation: "If campaigns use Custom Goals, verify they include all 3 required primary actions: Form Fill, Website Calls (via tracking), and Calls from Ads. Custom Goals should NOT include low-value actions" };
   }),
 
   // CT-FL8 — Auto-tagging enabled
@@ -377,7 +378,7 @@ const conversionChecks: CheckFn[] = [
     const totalOnlineConvs = campaigns.reduce((sum: number, c: any) => sum + Number(c.metrics?.conversions ?? 0), 0);
     if (totalOnlineConvs === 0) return { result: "skipped", details: "No online conversion data to compare", recommendation: "" };
     // Cannot get offline conversion counts directly from this query — flag for manual review
-    return { result: "warning", details: `Total account conversions: ${totalOnlineConvs.toFixed(0)} — verify offline volume is proportional`, recommendation: "Compare offline conversion volume to total leads. If Google Ads shows 40 leads but offline tracking shows only 5 qualified leads, investigate data flow issues (CRM sync, Zapier triggers, manual upload cadence)" };
+    return { result: "manual", details: `Total account conversions: ${totalOnlineConvs.toFixed(0)} — verify offline volume is proportional`, recommendation: "Compare offline conversion volume to total leads. If Google Ads shows 40 leads but offline tracking shows only 5 qualified leads, investigate data flow issues (CRM sync, Zapier triggers, manual upload cadence)" };
   }),
 ];
 
@@ -660,7 +661,7 @@ const structureChecks: CheckFn[] = [
     );
     if (hasPresenceOnly && !hasPresenceOrInterest) return { result: "pass", details: "Location targeting set to 'Presence' — users in your locations", recommendation: "" };
     if (hasPresenceOrInterest) return { result: "fail", details: "Location targeting includes 'Interest' — may serve ads to users NOT in your area", recommendation: "Switch to 'Presence: People in your targeted locations' to avoid irrelevant clicks from outside your service area" };
-    return { result: "warning", details: "Location targeting setting could not be verified — manual check recommended", recommendation: "Verify location targeting is set to 'Presence' not 'Presence or Interest'" };
+    return { result: "manual", details: "Location targeting setting could not be verified — manual check recommended", recommendation: "Verify location targeting is set to 'Presence' not 'Presence or Interest'" };
   }),
 
   // G12 — Network settings (Search Partners, Display Network)
@@ -938,7 +939,7 @@ const adsChecks: CheckFn[] = [
   check("G32", "Ads & Assets", "PMax has native video assets", "high", 30, (d) => {
     const assetGroups = d.assetGroups ?? [];
     if (assetGroups.length === 0) return { result: "skipped", details: "No PMax campaigns", recommendation: "" };
-    return { result: "warning", details: "PMax video assets require manual verification", recommendation: "Upload native videos in all formats (16:9, 1:1, 9:16) — auto-generated videos perform significantly worse" };
+    return { result: "manual", details: "PMax video assets require manual verification", recommendation: "Upload native videos in all formats (16:9, 1:1, 9:16) — auto-generated videos perform significantly worse" };
   }),
 
   // G33 — PMax asset group count (≥2 per campaign)
@@ -962,7 +963,7 @@ const adsChecks: CheckFn[] = [
     const campaigns = d.campaigns ?? [];
     const pmax = campaigns.filter((c: any) => c.campaign?.advertisingChannelType === "PERFORMANCE_MAX");
     if (pmax.length === 0) return { result: "skipped", details: "No PMax campaigns", recommendation: "" };
-    return { result: "warning", details: "PMax final URL expansion setting requires manual review", recommendation: "Review URL expansion: enable for discovery/broad reach, disable for controlled landing page targeting" };
+    return { result: "manual", details: "PMax final URL expansion setting requires manual review", recommendation: "Review URL expansion: enable for discovery/broad reach, disable for controlled landing page targeting" };
   }),
 
   // G35 — Ad copy relevance to keywords
@@ -1049,7 +1050,7 @@ const adsChecks: CheckFn[] = [
     const campaigns = d.campaigns ?? [];
     const pmax = campaigns.filter((c: any) => c.campaign?.advertisingChannelType === "PERFORMANCE_MAX");
     if (pmax.length === 0) return { result: "skipped", details: "No PMax campaigns", recommendation: "" };
-    return { result: "warning", details: "PMax search theme configuration requires manual verification", recommendation: "Configure up to 50 search themes per asset group to guide Google's AI on your target queries" };
+    return { result: "manual", details: "PMax search theme configuration requires manual verification", recommendation: "Configure up to 50 search themes per asset group to guide Google's AI on your target queries" };
   }),
 
   // G-PM5 — PMax negative keywords
@@ -1268,7 +1269,7 @@ const settingsChecks: CheckFn[] = [
       c.campaign?.advertisingChannelType === "DISPLAY"
     );
     if (!hasDisplay) return { result: "skipped", details: "No Display/PMax campaigns", recommendation: "" };
-    return { result: "warning", details: "Placement exclusions require manual verification", recommendation: "Add account-level placement exclusions for games, kids apps, MFA sites, and irrelevant mobile apps" };
+    return { result: "manual", details: "Placement exclusions require manual verification", recommendation: "Add account-level placement exclusions for games, kids apps, MFA sites, and irrelevant mobile apps" };
   }),
 
   // G59 — Landing page mobile speed (now automated via PageSpeed API)
@@ -1381,7 +1382,7 @@ const settingsChecks: CheckFn[] = [
     const active = campaigns.filter((c: any) => c.campaign?.status === "ENABLED");
     if (active.length === 0) return { result: "skipped", details: "No active campaigns", recommendation: "" };
     // Cannot verify zip exclusions via current API queries — flag for manual review
-    return { result: "warning", details: "Zip code exclusion strategy requires manual review", recommendation: "Exclude low-income zip codes where the target client demographic doesn't reside. Review income-level targeting in campaign location settings and add exclusions for areas with low case value potential" };
+    return { result: "manual", details: "Zip code exclusion strategy requires manual review", recommendation: "Exclude low-income zip codes where the target client demographic doesn't reside. Review income-level targeting in campaign location settings and add exclusions for areas with low case value potential" };
   }),
 
   // ST05 — Device CPL comparison (flag devices >30% above account avg)
@@ -1398,7 +1399,7 @@ const settingsChecks: CheckFn[] = [
     const avgCPL = safeDiv(totalCost, totalConv);
     if (avgCPL === 0) return { result: "skipped", details: "Cannot calculate CPL", recommendation: "" };
     // Cannot get device-level breakdown from campaign-level query — flag for manual review with the account average
-    return { result: "warning", details: `Account avg CPL: $${avgCPL.toFixed(2)} — verify no device exceeds $${(avgCPL * 1.3).toFixed(2)} (30% above avg)`, recommendation: "Check device performance in the UI. If any device (mobile, desktop, tablet) has CPL more than 30% above the account average, apply a negative bid adjustment. Mobile typically has higher CPL for family law" };
+    return { result: "manual", details: `Account avg CPL: $${avgCPL.toFixed(2)} — verify no device exceeds $${(avgCPL * 1.3).toFixed(2)} (30% above avg)`, recommendation: "Check device performance in the UI. If any device (mobile, desktop, tablet) has CPL more than 30% above the account average, apply a negative bid adjustment. Mobile typically has higher CPL for family law" };
   }),
 
   // ST06 — Shared budgets flagged
@@ -1469,11 +1470,11 @@ const sterlingxChecks: CheckFn[] = [
   }),
 
   check("SX02", "SterlingX Governance", "Attribution window documented", "critical", 10, () => {
-    return { result: "warning", details: "Attribution window alignment requires manual verification", recommendation: "Document and align attribution windows across all active platforms in a shared tracking sheet" };
+    return { result: "manual", details: "Attribution window alignment requires manual verification", recommendation: "Document and align attribution windows across all active platforms in a shared tracking sheet" };
   }),
 
   check("SX03", "SterlingX Governance", "Shared audience suppression active", "medium", 15, () => {
-    return { result: "warning", details: "Cross-platform audience suppression requires manual verification", recommendation: "Sync customer suppression lists across all platforms to avoid targeting existing customers with acquisition campaigns" };
+    return { result: "manual", details: "Cross-platform audience suppression requires manual verification", recommendation: "Sync customer suppression lists across all platforms to avoid targeting existing customers with acquisition campaigns" };
   }),
 
   check("SX04", "SterlingX Governance", "SterlingX naming convention compliance", "medium", 15, (d) => {
@@ -1511,7 +1512,7 @@ const sterlingxChecks: CheckFn[] = [
   }),
 
   check("SX08", "SterlingX Reporting", "Automated reporting dashboards", "medium", 30, () => {
-    return { result: "warning", details: "Reporting dashboard status requires manual verification", recommendation: "Configure Looker Studio or live dashboard for client reporting — manual reports are not scalable" };
+    return { result: "manual", details: "Reporting dashboard status requires manual verification", recommendation: "Configure Looker Studio or live dashboard for client reporting — manual reports are not scalable" };
   }),
 
   check("SX09", "SterlingX Reporting", "MER (blended ROAS) trackable", "high", 20, (d) => {
@@ -1522,7 +1523,7 @@ const sterlingxChecks: CheckFn[] = [
   }),
 
   check("SX10", "SterlingX Reporting", "Monthly pacing alerts configured", "medium", 15, () => {
-    return { result: "warning", details: "Pacing alert configuration requires manual verification", recommendation: "Configure automated pacing alerts (budget, CPA, ROAS) to catch deviations before they impact performance" };
+    return { result: "manual", details: "Pacing alert configuration requires manual verification", recommendation: "Configure automated pacing alerts (budget, CPA, ROAS) to catch deviations before they impact performance" };
   }),
 
   // ── Agency Operations (SX11-SX15) ──
@@ -1535,11 +1536,11 @@ const sterlingxChecks: CheckFn[] = [
   }),
 
   check("SX12", "SterlingX Operations", "Billing ownership verified (client-owned)", "high", 10, () => {
-    return { result: "warning", details: "Billing ownership requires manual verification", recommendation: "Verify client owns billing method — agency billing should be documented with clear terms" };
+    return { result: "manual", details: "Billing ownership requires manual verification", recommendation: "Verify client owns billing method — agency billing should be documented with clear terms" };
   }),
 
   check("SX13", "SterlingX Operations", "Creative asset library organized", "medium", 15, () => {
-    return { result: "warning", details: "Asset library organization requires manual verification", recommendation: "Maintain a tagged, dated, versioned creative asset library for efficient ad production" };
+    return { result: "manual", details: "Asset library organization requires manual verification", recommendation: "Maintain a tagged, dated, versioned creative asset library for efficient ad production" };
   }),
 
   check("SX14", "SterlingX Operations", "A/B test velocity (≥2 tests/month)", "medium", 30, (d) => {
@@ -1553,7 +1554,7 @@ const sterlingxChecks: CheckFn[] = [
   }),
 
   check("SX15", "SterlingX Operations", "Competitor monitoring cadence", "low", 15, () => {
-    return { result: "warning", details: "Competitor monitoring cadence requires manual verification", recommendation: "Conduct monthly competitive analysis — review auction insights, ad copy, and market positioning" };
+    return { result: "manual", details: "Competitor monitoring cadence requires manual verification", recommendation: "Conduct monthly competitive analysis — review auction insights, ad copy, and market positioning" };
   }),
 ];
 
@@ -1578,13 +1579,14 @@ export function runAudit(data: AuditData): AuditReport {
   const warningCount = checks.filter((c) => c.result === "warning").length;
   const failCount = checks.filter((c) => c.result === "fail").length;
   const skippedCount = checks.filter((c) => c.result === "skipped").length;
+  const manualCount = checks.filter((c) => c.result === "manual").length;
 
   // Calculate weighted score per category
   const categoryScores: Record<string, number> = {};
   const categoryMaxScores: Record<string, number> = {};
 
   for (const c of checks) {
-    if (c.result === "skipped") continue;
+    if (c.result === "skipped" || c.result === "manual") continue;
     const weight = SEVERITY_MULTIPLIER[c.severity];
     const earned = c.result === "pass" ? weight : c.result === "warning" ? weight * 0.5 : 0;
     categoryScores[c.category] = (categoryScores[c.category] ?? 0) + earned;
@@ -1614,7 +1616,7 @@ export function runAudit(data: AuditData): AuditReport {
     .sort((a, b) => SEVERITY_MULTIPLIER[b.severity] - SEVERITY_MULTIPLIER[a.severity]);
 
   const criticalIssues = checks.filter((c) => c.result === "fail" && c.severity === "critical");
-  const summary = generateSummary(score, grade, passCount, warningCount, failCount, criticalIssues.length, quickWins.length);
+  const summary = generateSummary(score, grade, passCount, warningCount, failCount, manualCount, criticalIssues.length, quickWins.length);
 
   return {
     score,
@@ -1624,6 +1626,7 @@ export function runAudit(data: AuditData): AuditReport {
     warningCount,
     failCount,
     skippedCount,
+    manualCount,
     checks,
     summary,
     quickWins,
@@ -1637,6 +1640,7 @@ function generateSummary(
   pass: number,
   warn: number,
   fail: number,
+  manual: number,
   critical: number,
   quickWins: number,
 ): string {
@@ -1652,8 +1656,8 @@ function generateSummary(
 
 ${gradeDescriptions[grade]}
 
-Results: ${pass} passed, ${warn} warnings, ${fail} failed${critical > 0 ? ` (${critical} CRITICAL)` : ""}
+Results: ${pass} passed, ${warn} warnings, ${fail} failed${critical > 0 ? ` (${critical} CRITICAL)` : ""}${manual > 0 ? `, ${manual} manual review` : ""}
 Quick Wins Available: ${quickWins} high-impact fixes under 15 minutes each
 
-This audit covers 96 Google Ads platform checks (including family law specialization and lead gen hardening) and 15 SterlingX agency governance checks (111 total).`;
+This audit covers 96 Google Ads platform checks (including family law specialization and lead gen hardening) and 15 SterlingX agency governance checks (111 total). Manual review items are excluded from scoring.`;
 }

@@ -26,6 +26,7 @@ export const checkResultEnum = pgEnum("check_result", [
   "warning",
   "fail",
   "skipped",
+  "manual",
 ]);
 
 export const severityEnum = pgEnum("severity", [
@@ -70,6 +71,7 @@ export const audits = pgTable("audits", {
   warningCount: integer("warning_count").default(0),
   failCount: integer("fail_count").default(0),
   skippedCount: integer("skipped_count").default(0),
+  manualCount: integer("manual_count").default(0),
   summary: text("summary"),
   rawData: jsonb("raw_data"), // Cached Google Ads data snapshot
   aiAnalysis: jsonb("ai_analysis"), // Claude-generated narrative analysis

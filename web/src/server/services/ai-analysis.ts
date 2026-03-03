@@ -36,6 +36,7 @@ export interface AIAnalysisInput {
   warningCount: number;
   failCount: number;
   skippedCount: number;
+  manualCount: number;
   categoryScores: Record<string, number>;
   checks: AuditCheckForAI[];
   dataCounts: Record<string, number>;

@@ -171,6 +171,7 @@ export const auditRouter = router({
           warningCount: report.warningCount,
           failCount: report.failCount,
           skippedCount: report.skippedCount,
+          manualCount: report.manualCount,
           categoryScores: report.categoryScores,
           checks: report.checks.map((c) => ({
             checkId: c.checkId,
@@ -197,6 +198,7 @@ export const auditRouter = router({
             warningCount: report.warningCount,
             failCount: report.failCount,
             skippedCount: report.skippedCount,
+            manualCount: report.manualCount,
             summary: report.summary,
             rawData: dataSummary,
             aiAnalysis,
