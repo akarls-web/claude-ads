@@ -157,7 +157,8 @@ export class GoogleAdsService {
         metrics.conversions_value,
         metrics.ctr,
         metrics.average_cpc,
-        metrics.cost_per_conversion
+        metrics.cost_per_conversion,
+        campaign.tracking_url_template
       FROM campaign
       WHERE campaign.status != 'REMOVED'
         AND segments.date DURING LAST_30_DAYS
@@ -246,7 +247,9 @@ export class GoogleAdsService {
         metrics.impressions,
         metrics.clicks,
         metrics.ctr,
-        metrics.conversions
+        metrics.conversions,
+        ad_group_ad.ad.final_urls,
+        ad_group_ad.policy_summary.approval_status
       FROM ad_group_ad
       WHERE ad_group_ad.status != 'REMOVED'
         AND campaign.status != 'REMOVED'
@@ -263,7 +266,11 @@ export class GoogleAdsService {
         conversion_action.status,
         conversion_action.category,
         conversion_action.include_in_conversions_metric,
-        conversion_action.tag_snippets
+        conversion_action.tag_snippets,
+        conversion_action.counting_type,
+        conversion_action.click_through_lookback_window_days,
+        conversion_action.view_through_lookback_window_days,
+        conversion_action.attribution_model_settings.attribution_model
       FROM conversion_action
       WHERE conversion_action.status != 'REMOVED'
     `);
@@ -317,7 +324,115 @@ export class GoogleAdsService {
     `);
   }
 
-  /** Fetch all data needed for a full 74-check audit */
+  // ─── New Data Fetchers for Automated Checks ───────────────
+
+  async fetchExtensions(customerId: string) {
+    return this.query(customerId, `
+      SELECT
+        asset.id,
+        asset.type,
+        asset.name,
+        asset.sitelink_asset.description1,
+        asset.sitelink_asset.description2,
+        asset.sitelink_asset.link_text,
+        asset.callout_asset.callout_text,
+        asset.structured_snippet_asset.header,
+        asset.structured_snippet_asset.values,
+        asset.call_asset.phone_number,
+        asset.call_asset.ad_schedule_targets,
+        asset.image_asset.full_size.url,
+        asset.lead_form_asset.business_name,
+        customer_asset.status,
+        customer_asset.field_type
+      FROM customer_asset
+      WHERE customer_asset.status != 'REMOVED'
+    `);
+  }
+
+  async fetchAdScheduleCriteria(customerId: string) {
+    return this.query(customerId, `
+      SELECT
+        campaign_criterion.ad_schedule.day_of_week,
+        campaign_criterion.ad_schedule.start_hour,
+        campaign_criterion.ad_schedule.end_hour,
+        campaign_criterion.ad_schedule.start_minute,
+        campaign_criterion.ad_schedule.end_minute,
+        campaign.id,
+        campaign.name
+      FROM campaign_criterion
+      WHERE campaign_criterion.type = 'AD_SCHEDULE'
+        AND campaign.status != 'REMOVED'
+    `);
+  }
+
+  async fetchLanguageCriteria(customerId: string) {
+    return this.query(customerId, `
+      SELECT
+        campaign_criterion.language.language_constant,
+        campaign.id,
+        campaign.name
+      FROM campaign_criterion
+      WHERE campaign_criterion.type = 'LANGUAGE'
+        AND campaign.status != 'REMOVED'
+    `);
+  }
+
+  async fetchAudienceCriteria(customerId: string) {
+    return this.query(customerId, `
+      SELECT
+        campaign_criterion.type,
+        campaign_criterion.user_list.user_list,
+        campaign.id,
+        campaign.name
+      FROM campaign_criterion
+      WHERE campaign_criterion.type IN ('USER_LIST', 'USER_INTEREST', 'CUSTOM_AUDIENCE')
+        AND campaign.status != 'REMOVED'
+    `);
+  }
+
+  async fetchUserLists(customerId: string) {
+    return this.query(customerId, `
+      SELECT
+        user_list.id,
+        user_list.name,
+        user_list.type,
+        user_list.membership_status,
+        user_list.size_for_search,
+        user_list.size_for_display
+      FROM user_list
+    `);
+  }
+
+  async fetchAssetGroupAssets(customerId: string) {
+    return this.query(customerId, `
+      SELECT
+        asset_group_asset.field_type,
+        asset_group_asset.status,
+        asset_group.id,
+        asset_group.name,
+        campaign.id
+      FROM asset_group_asset
+      WHERE campaign.advertising_channel_type = 'PERFORMANCE_MAX'
+        AND campaign.status != 'REMOVED'
+        AND asset_group.status != 'REMOVED'
+        AND asset_group_asset.status != 'REMOVED'
+    `);
+  }
+
+  async fetchAssetGroupSignals(customerId: string) {
+    return this.query(customerId, `
+      SELECT
+        asset_group_signal.audience_signal,
+        asset_group.id,
+        asset_group.name,
+        campaign.id
+      FROM asset_group_signal
+      WHERE campaign.advertising_channel_type = 'PERFORMANCE_MAX'
+        AND campaign.status != 'REMOVED'
+    `);
+  }
+
+  /** Fetch all data needed for a full 111-check audit */
   async fetchAllAuditData(customerId: string) {
     const safe = async <T>(label: string, fn: () => Promise<T>): Promise<T | []> => {
       try {
@@ -328,6 +443,7 @@ export class GoogleAdsService {
       }
     };
 
+    // Phase 1: All GAQL queries in parallel
     const [
       account,
       campaigns,
@@ -339,6 +455,13 @@ export class GoogleAdsService {
       negativeKeywords,
       assetGroups,
       changeHistory,
+      extensions,
+      adSchedule,
+      languageCriteria,
+      audienceCriteria,
+      userLists,
+      assetGroupAssets,
+      assetGroupSignals,
     ] = await Promise.all([
       safe("accountOverview", () => this.fetchAccountOverview(customerId)),
       safe("campaigns", () => this.fetchCampaigns(customerId)),
@@ -350,7 +473,32 @@ export class GoogleAdsService {
       safe("negativeKeywords", () => this.fetchNegativeKeywords(customerId)),
       safe("assetGroups", () => this.fetchAssetGroups(customerId)),
       safe("changeHistory", () => this.fetchChangeHistory(customerId)),
+      safe("extensions", () => this.fetchExtensions(customerId)),
+      safe("adSchedule", () => this.fetchAdScheduleCriteria(customerId)),
+      safe("languageCriteria", () => this.fetchLanguageCriteria(customerId)),
+      safe("audienceCriteria", () => this.fetchAudienceCriteria(customerId)),
+      safe("userLists", () => this.fetchUserLists(customerId)),
+      safe("assetGroupAssets", () => this.fetchAssetGroupAssets(customerId)),
+      safe("assetGroupSignals", () => this.fetchAssetGroupSignals(customerId)),
     ]);
+
+    // Phase 2: Landing page analysis (depends on ads data for URLs)
+    const adsArray = Array.isArray(ads) ? ads : [];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const finalUrls = [...new Set(
+      adsArray
+        .flatMap((a: any) => a.adGroupAd?.ad?.finalUrls ?? [])
+        .filter(Boolean) as string[]
+    )].slice(0, 5);
+
+    let landingPageAnalysis: LandingPageAnalysis[] = [];
+    if (finalUrls.length > 0) {
+      try {
+        landingPageAnalysis = await analyzeLandingPages(finalUrls);
+      } catch (err) {
+        console.warn(`[fetchAllAuditData] landingPageAnalysis failed:`, err instanceof Error ? err.message : err);
+      }
+    }
 
     return {
       account,
@@ -363,7 +511,114 @@ export class GoogleAdsService {
       negativeKeywords,
       assetGroups,
       changeHistory,
+      extensions,
+      adSchedule,
+      languageCriteria,
+      audienceCriteria,
+      userLists,
+      assetGroupAssets,
+      assetGroupSignals,
+      landingPageAnalysis,
       fetchedAt: new Date().toISOString(),
     };
   }
+}
+
+// ─── Landing Page Analysis (Tier 3) ─────────────────────────
+
+export interface LandingPageAnalysis {
+  url: string;
+  hasGtag: boolean;
+  hasGTM: boolean;
+  gtmContainerId?: string;
+  hasSchemaMarkup: boolean;
+  schemaTypes: string[];
+  title: string;
+  h1: string;
+  pageSpeedScore?: number;
+  lcpMs?: number;
+  error?: string;
+}
+
+export async function analyzeLandingPages(urls: string[]): Promise<LandingPageAnalysis[]> {
+  const unique = [...new Set(urls)].slice(0, 5);
+
+  const results = await Promise.allSettled(
+    unique.map(async (url): Promise<LandingPageAnalysis> => {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 8000);
+      try {
+        const res = await fetch(url, {
+          signal: controller.signal,
+          headers: { "User-Agent": "Mozilla/5.0 (compatible; SterlingX-Audit/1.0)" },
+          redirect: "follow",
+        });
+        const html = await res.text();
+        clearTimeout(timeout);
+
+        const hasGtag = /gtag\(|googletagmanager\.com\/gtag/i.test(html);
+        const hasGTM = /googletagmanager\.com\/gtm\.js/i.test(html);
+        const gtmMatch = html.match(/GTM-[A-Z0-9]+/);
+
+        // JSON-LD schema
+        const jsonLdBlocks = html.match(/<script[^>]*type\s*=\s*["']application\/ld\+json["'][^>]*>[\s\S]*?<\/script>/gi) ?? [];
+        const schemaTypes: string[] = [];
+        for (const block of jsonLdBlocks) {
+          try {
+            const json = block.replace(/<script[^>]*>/i, "").replace(/<\/script>/i, "");
+            const parsed = JSON.parse(json);
+            const t = parsed["@type"];
+            if (t) schemaTypes.push(Array.isArray(t) ? t.join(", ") : String(t));
+          } catch { /* skip malformed JSON-LD */ }
+        }
+        const hasMicrodata = /itemtype=|itemprop=/i.test(html);
+
+        const titleMatch = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+        const title = titleMatch ? titleMatch[1].replace(/\s+/g, " ").trim() : "";
+
+        const h1Match = html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i);
+        const h1 = h1Match ? h1Match[1].replace(/<[^>]*>/g, "").replace(/\s+/g, " ").trim() : "";
+
+        // PageSpeed Insights API (free, no key needed for low volume)
+        let pageSpeedScore: number | undefined;
+        let lcpMs: number | undefined;
+        try {
+          const psController = new AbortController();
+          const psTimeout = setTimeout(() => psController.abort(), 15000);
+          const psUrl = `https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url=${encodeURIComponent(url)}&strategy=mobile&category=performance`;
+          const psRes = await fetch(psUrl, { signal: psController.signal });
+          clearTimeout(psTimeout);
+          if (psRes.ok) {
+            const psData = await psRes.json();
+            const score = psData.lighthouseResult?.categories?.performance?.score;
+            if (score != null) pageSpeedScore = Math.round(score * 100);
+            const lcp = psData.lighthouseResult?.audits?.["largest-contentful-paint"]?.numericValue;
+            if (lcp != null) lcpMs = Math.round(lcp);
+          }
+        } catch { /* PageSpeed timeout/failure is non-fatal */ }
+
+        return {
+          url, hasGtag, hasGTM,
+          gtmContainerId: gtmMatch?.[0],
+          hasSchemaMarkup: schemaTypes.length > 0 || hasMicrodata,
+          schemaTypes, title, h1,
+          pageSpeedScore, lcpMs,
+        };
+      } catch (err) {
+        clearTimeout(timeout);
+        return {
+          url, hasGtag: false, hasGTM: false,
+          hasSchemaMarkup: false, schemaTypes: [],
+          title: "", h1: "",
+          error: err instanceof Error ? err.message : "Fetch failed",
+        };
+      }
+    })
+  );
+
+  return results.map((r) =>
+    r.status === "fulfilled"
+      ? r.value
+      : { url: "", hasGtag: false, hasGTM: false, hasSchemaMarkup: false, schemaTypes: [], title: "", h1: "", error: "Analysis failed" }
+  );
 }

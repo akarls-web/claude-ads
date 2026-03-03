@@ -148,7 +148,18 @@ const conversionChecks: CheckFn[] = [
   check("G46", "Conversion Tracking", "Conversion window matches sales cycle", "medium", 10, (d) => {
     const convs = d.conversions ?? [];
     if (convs.length === 0) return { result: "skipped", details: "No conversions to check", recommendation: "" };
-    return { result: "warning", details: "Conversion window configuration requires manual review", recommendation: "Verify window matches sales cycle: 7d e-commerce, 30d lead gen, 30-90d B2B" };
+    const primary = convs.filter((c: any) => c.conversionAction?.includeInConversionsMetric === true && c.conversionAction?.status === "ENABLED");
+    if (primary.length === 0) return { result: "skipped", details: "No primary conversions", recommendation: "" };
+    const hasWindowData = primary.some((c: any) => c.conversionAction?.clickThroughLookbackWindowDays != null);
+    if (!hasWindowData) return { result: "warning", details: "Conversion window data not available via API", recommendation: "Verify window matches sales cycle: 30d for lead gen, 30-90d for family law" };
+    const issues: string[] = [];
+    for (const c of primary) {
+      const window = c.conversionAction?.clickThroughLookbackWindowDays;
+      const name = c.conversionAction?.name ?? "Unknown";
+      if (window != null && (window < 30 || window > 90)) issues.push(`${name}: ${window}d`);
+    }
+    if (issues.length === 0) return { result: "pass", details: "All conversion windows within recommended range (30-90 days)", recommendation: "" };
+    return { result: "warning", details: `Windows outside recommended range: ${issues.join(", ")}`, recommendation: "Set conversion window to 30 days for lead gen. Family law sales cycles can extend to 90 days for retained cases" };
   }),
 
   // G47 — Micro vs macro separation (Primary vs Secondary) + Count setting
@@ -171,8 +182,17 @@ const conversionChecks: CheckFn[] = [
   check("G48", "Conversion Tracking", "Data-driven attribution model active", "medium", 5, (d) => {
     const convs = d.conversions ?? [];
     if (convs.length === 0) return { result: "skipped", details: "No conversions", recommendation: "" };
-    // Cannot directly check attribution model via current API fields — recommend DDA
-    return { result: "warning", details: "Attribution model cannot be verified via API — manual check required", recommendation: "Select Data-Driven Attribution (DDA) for all conversion actions. Rule-based models were deprecated Sep 2025" };
+    const primary = convs.filter((c: any) => c.conversionAction?.includeInConversionsMetric === true && c.conversionAction?.status === "ENABLED");
+    if (primary.length === 0) return { result: "skipped", details: "No primary conversions", recommendation: "" };
+    const hasModelData = primary.some((c: any) => c.conversionAction?.attributionModelSettings?.attributionModel);
+    if (!hasModelData) return { result: "warning", details: "Attribution model data not available via API", recommendation: "Verify Data-Driven Attribution (DDA) is active for all conversion actions" };
+    const nonDDA = primary.filter((c: any) => {
+      const model = c.conversionAction?.attributionModelSettings?.attributionModel;
+      return model && model !== "GOOGLE_SEARCH_ATTRIBUTION_DATA_DRIVEN" && model !== "EXTERNAL";
+    });
+    if (nonDDA.length === 0) return { result: "pass", details: "All primary conversions use Data-Driven Attribution", recommendation: "" };
+    const models = nonDDA.map((c: any) => `${c.conversionAction?.name}: ${c.conversionAction?.attributionModelSettings?.attributionModel}`);
+    return { result: "fail", details: `${nonDDA.length} conversions not using DDA: ${models.join(", ")}`, recommendation: "Switch all conversion actions to Data-Driven Attribution. Rule-based models were deprecated Sep 2025" };
   }),
 
   // G49 — Conversion value assignment
@@ -205,13 +225,27 @@ const conversionChecks: CheckFn[] = [
     return { result: "fail", details: "No conversion tracking integration detected", recommendation: "Link GA4 to Google Ads for cross-platform attribution and audience sharing" };
   }),
 
-  // G-CT3 — Google Tag firing correctly
+  // G-CT3 — Google Tag firing correctly (enhanced with landing page HTML scan)
   check("G-CT3", "Conversion Tracking", "Google Tag firing on all pages", "critical", 15, (d) => {
     const convs = d.conversions ?? [];
+    const lpAnalysis = d.landingPageAnalysis ?? [];
     const hasTag = convs.some((c: any) => c.conversionAction?.tagSnippets?.length > 0);
     if (hasTag) return { result: "pass", details: "Tag snippets configured for conversion actions", recommendation: "" };
+    // Check landing pages for gtag/GTM
+    if (lpAnalysis.length > 0) {
+      const withTag = lpAnalysis.filter((lp: any) => lp.hasGtag || lp.hasGTM);
+      if (withTag.length === lpAnalysis.length) {
+        const tagType = withTag[0].hasGTM ? `GTM (${withTag[0].gtmContainerId ?? "detected"})` : "gtag.js";
+        return { result: "pass", details: `${tagType} detected on ${withTag.length}/${lpAnalysis.length} landing pages`, recommendation: "" };
+      }
+      if (withTag.length > 0) {
+        const missing = lpAnalysis.filter((lp: any) => !lp.hasGtag && !lp.hasGTM).map((lp: any) => lp.url);
+        return { result: "warning", details: `Tag found on ${withTag.length}/${lpAnalysis.length} pages. Missing: ${missing.join(", ")}`, recommendation: "Ensure gtag.js or GTM fires on ALL landing pages including thank-you pages" };
+      }
+      return { result: "fail", details: `No Google Tag detected on ${lpAnalysis.length} landing pages analyzed`, recommendation: "Install Google Tag Manager or gtag.js across all landing pages" };
+    }
     if (convs.length === 0) return { result: "skipped", details: "No conversions configured", recommendation: "" };
-    return { result: "warning", details: "Cannot verify tag firing remotely — manual check required", recommendation: "Use Google Tag Assistant to verify gtag.js or GTM fires correctly on all key pages" };
+    return { result: "warning", details: "Cannot verify tag firing — no landing page data available", recommendation: "Use Google Tag Assistant to verify gtag.js or GTM fires correctly on all key pages" };
   }),
 
   // ── Lead Gen Conversion Hardening (CT-FL1 through CT-FL10) ──
@@ -280,11 +314,14 @@ const conversionChecks: CheckFn[] = [
   check("CT-FL5", "Conversion Tracking", "Conversion count set to 'One' (lead gen)", "critical", 5, (d) => {
     const convs = d.conversions ?? [];
     if (convs.length === 0) return { result: "skipped", details: "No conversions", recommendation: "" };
-    // Note: The Google Ads API doesn't directly expose the count setting in this query.
-    // We flag this as a manual check with clear guidance.
     const primary = convs.filter((c: any) => c.conversionAction?.includeInConversionsMetric === true && c.conversionAction?.status === "ENABLED");
     if (primary.length === 0) return { result: "skipped", details: "No primary conversions to check", recommendation: "" };
-    return { result: "warning", details: `${primary.length} primary conversion actions — verify all are set to 'Count: One' (not 'Every')`, recommendation: "For lead gen, all conversion actions must use 'Count: One conversion' to prevent double-counting repeat form fills/calls from the same person" };
+    const hasCountData = primary.some((c: any) => c.conversionAction?.countingType);
+    if (!hasCountData) return { result: "warning", details: `${primary.length} primary conversions — counting type data not available`, recommendation: "Verify all primary conversions use 'Count: One' for lead gen" };
+    const manyPerClick = primary.filter((c: any) => c.conversionAction?.countingType === "MANY_PER_CLICK");
+    if (manyPerClick.length === 0) return { result: "pass", details: `All ${primary.length} primary conversions set to 'One per click'`, recommendation: "" };
+    const names = manyPerClick.map((c: any) => c.conversionAction?.name).join(", ");
+    return { result: "fail", details: `${manyPerClick.length} primary conversions set to 'Every': ${names}`, recommendation: "Switch all lead gen conversions to 'Count: One'. 'Every' counts repeat form fills/calls from the same person, inflating numbers and misleading Smart Bidding" };
   }),
 
   // CT-FL6 — Low-value actions not marked as Primary
@@ -318,13 +355,15 @@ const conversionChecks: CheckFn[] = [
     return { result: "warning", details: "Auto-tagging status could not be determined", recommendation: "Verify auto-tagging is enabled under Account Settings → Auto-tagging" };
   }),
 
-  // CT-FL9 — Tracking template audit
+  // CT-FL9 — Tracking template audit (now automated via API)
   check("CT-FL9", "Conversion Tracking", "Tracking template configuration", "medium", 10, (d) => {
     const campaigns = d.campaigns ?? [];
     const active = campaigns.filter((c: any) => c.campaign?.status === "ENABLED");
     if (active.length === 0) return { result: "skipped", details: "No active campaigns", recommendation: "" };
-    // Cannot directly check tracking templates via current GAQL — flag for manual review
-    return { result: "warning", details: "Tracking template configuration requires manual review", recommendation: "Verify: account-level tracking template is set (if needed), and document any campaign-level tracking templates. Campaign-level templates override account-level and may cause UTM inconsistencies" };
+    const withTemplate = active.filter((c: any) => c.campaign?.trackingUrlTemplate);
+    if (withTemplate.length === active.length) return { result: "pass", details: `All ${active.length} active campaigns have tracking templates configured`, recommendation: "" };
+    if (withTemplate.length > 0) return { result: "warning", details: `${withTemplate.length}/${active.length} campaigns have tracking templates — inconsistent`, recommendation: "Standardize tracking templates across all campaigns. Campaign-level templates override account-level" };
+    return { result: "warning", details: "No campaign-level tracking templates detected", recommendation: "Verify an account-level tracking template is set, or add campaign-level templates for consistent UTM tracking" };
   }),
 
   // CT-FL10 — Offline conversion data volume healthy
@@ -595,11 +634,17 @@ const structureChecks: CheckFn[] = [
     return { result: "warning", details: `${capped.length} campaigns reaching daily budget cap`, recommendation: "Increase budget for capped campaigns or consolidate to ensure ads show throughout the day" };
   }),
 
-  // G10 — Ad schedule configured
+  // G10 — Ad schedule configured (now automated via API)
   check("G10", "Account Structure", "Ad schedule configured (if applicable)", "low", 10, (d) => {
     const campaigns = d.campaigns ?? [];
+    const adSchedule = d.adSchedule ?? [];
     if (campaigns.length === 0) return { result: "skipped", details: "No campaigns", recommendation: "" };
-    return { result: "warning", details: "Ad schedule configuration requires manual verification", recommendation: "Set ad schedules if your business has defined operating hours to avoid spending when leads cannot be handled" };
+    if (adSchedule.length === 0) return { result: "warning", details: "No ad schedules configured on any campaign", recommendation: "Set ad schedules for business hours to avoid showing ads when leads cannot be handled" };
+    const scheduledCampaigns = new Set(adSchedule.map((s: any) => String(s.campaign?.id)));
+    const active = campaigns.filter((c: any) => c.campaign?.status === "ENABLED");
+    const pct = safeDiv(scheduledCampaigns.size, active.length) * 100;
+    if (pct >= 80) return { result: "pass", details: `${scheduledCampaigns.size}/${active.length} campaigns have ad schedules configured`, recommendation: "" };
+    return { result: "warning", details: `Only ${scheduledCampaigns.size}/${active.length} campaigns have ad schedules`, recommendation: "Add ad schedules to remaining campaigns to prevent spend during hours when leads cannot be handled" };
   }),
 
   // G11 — Geographic targeting accuracy
@@ -855,11 +900,38 @@ const adsChecks: CheckFn[] = [
     return { result: "warning", details: `${overPinned.length} RSAs have excessive pinning (>3 positions pinned)`, recommendation: "Reduce pinning to 1-2 positions max. Over-pinning limits Google's ability to find winning combinations" };
   }),
 
-  // G31 — PMax asset group density
+  // G31 — PMax asset group density (now automated via API)
   check("G31", "Ads & Assets", "PMax asset groups have maximum density", "critical", 20, (d) => {
     const assetGroups = d.assetGroups ?? [];
+    const assetGroupAssets = d.assetGroupAssets ?? [];
     if (assetGroups.length === 0) return { result: "skipped", details: "No PMax asset groups", recommendation: "" };
-    return { result: "warning", details: "PMax asset density requires manual audit — verify 20 images, 5 logos, 5 videos per group", recommendation: "Ensure maximum asset density: 20 images, 5 logos, 5+ videos (16:9, 1:1, 9:16), 5 headlines, 5 descriptions per group" };
+    if (assetGroupAssets.length === 0) return { result: "warning", details: "PMax asset density data not available", recommendation: "Verify 20 images, 5 logos, 5+ videos, 5 headlines, 5 descriptions per asset group" };
+    const groupCounts = new Map<string, Map<string, number>>();
+    for (const a of assetGroupAssets) {
+      const gId = String(a.assetGroup?.id ?? "");
+      const type = String(a.assetGroupAsset?.fieldType ?? "");
+      if (!groupCounts.has(gId)) groupCounts.set(gId, new Map());
+      const tc = groupCounts.get(gId)!;
+      tc.set(type, (tc.get(type) ?? 0) + 1);
+    }
+    const issues: string[] = [];
+    for (const [gId, counts] of groupCounts) {
+      const images = counts.get("MARKETING_IMAGE") ?? 0;
+      const headlines = counts.get("HEADLINE") ?? 0;
+      const descriptions = counts.get("DESCRIPTION") ?? 0;
+      const videos = counts.get("YOUTUBE_VIDEO") ?? 0;
+      const logos = counts.get("LOGO") ?? 0;
+      const groupName = assetGroups.find((ag: any) => String(ag.assetGroup?.id) === gId)?.assetGroup?.name ?? gId;
+      const missing: string[] = [];
+      if (images < 15) missing.push(`images: ${images}/20`);
+      if (headlines < 5) missing.push(`headlines: ${headlines}/5`);
+      if (descriptions < 5) missing.push(`descriptions: ${descriptions}/5`);
+      if (videos < 3) missing.push(`videos: ${videos}/5`);
+      if (logos < 3) missing.push(`logos: ${logos}/5`);
+      if (missing.length > 0) issues.push(`${groupName}: ${missing.join(", ")}`);
+    }
+    if (issues.length === 0) return { result: "pass", details: "All PMax asset groups have adequate density", recommendation: "" };
+    return { result: "fail", details: `Asset density gaps: ${issues.join("; ")}`, recommendation: "Fill all asset slots: 20 images, 5 logos, 5+ videos (16:9, 1:1, 9:16), 5 headlines, 5 descriptions" };
   }),
 
   // G32 — PMax video assets present
@@ -941,11 +1013,15 @@ const adsChecks: CheckFn[] = [
     return { result: "fail", details: `Account CTR: ${avgCTR.toFixed(2)}% — significantly below legal industry average (5-7%)`, recommendation: "Critically low CTR for legal. Rewrite RSA headlines with practice area terms, add sitelinks/callouts/structured snippets, and tighten ad group themes around specific practice areas" };
   }),
 
-  // G-PM1 — PMax audience signals configured
+  // G-PM1 — PMax audience signals configured (now automated via API)
   check("G-PM1", "Ads & Assets", "PMax audience signals configured", "high", 15, (d) => {
     const assetGroups = d.assetGroups ?? [];
+    const signals = d.assetGroupSignals ?? [];
     if (assetGroups.length === 0) return { result: "skipped", details: "No PMax campaigns", recommendation: "" };
-    return { result: "warning", details: "PMax audience signal configuration requires manual verification", recommendation: "Add custom audience signals per asset group: custom segments, interests, remarketing lists for better targeting" };
+    if (signals.length === 0) return { result: "warning", details: "No PMax audience signals detected", recommendation: "Add custom audience signals per asset group: custom segments, interests, remarketing lists" };
+    const groupsWithSignals = new Set(signals.map((s: any) => String(s.assetGroup?.id)));
+    if (groupsWithSignals.size >= assetGroups.length) return { result: "pass", details: `All ${assetGroups.length} asset groups have audience signals configured`, recommendation: "" };
+    return { result: "warning", details: `${groupsWithSignals.size}/${assetGroups.length} asset groups have audience signals`, recommendation: "Add audience signals to all asset groups for better PMax targeting" };
   }),
 
   // G-PM2 — PMax Ad Strength
@@ -1088,61 +1164,100 @@ const settingsChecks: CheckFn[] = [
 
   // ── Extensions & Assets ──
 
-  // G50 — Sitelink extensions
+  // G50 — Sitelink extensions (now automated via API)
   check("G50", "Settings & Targeting", "Sitelink extensions active (≥4)", "high", 10, (d) => {
-    const campaigns = d.campaigns ?? [];
-    if (campaigns.length === 0) return { result: "skipped", details: "No campaigns", recommendation: "" };
-    return { result: "warning", details: "Sitelink extensions require manual verification", recommendation: "Add ≥4 sitelinks per campaign with descriptive text to increase ad real estate and CTR by 10-20%" };
+    const extensions = d.extensions ?? [];
+    if ((d.campaigns ?? []).length === 0) return { result: "skipped", details: "No campaigns", recommendation: "" };
+    const sitelinks = extensions.filter((e: any) => e.asset?.type === "SITELINK" || e.customerAsset?.fieldType === "SITELINK");
+    if (sitelinks.length === 0) {
+      if (extensions.length === 0) return { result: "warning", details: "Extension data not available", recommendation: "Add ≥4 sitelinks per campaign to increase CTR by 10-20%" };
+      return { result: "fail", details: "No sitelink extensions found in the account", recommendation: "Add ≥4 sitelinks: Contact Us, Case Results, Free Consultation, About Our Firm" };
+    }
+    if (sitelinks.length >= 4) return { result: "pass", details: `${sitelinks.length} sitelink extensions active`, recommendation: "" };
+    return { result: "warning", details: `Only ${sitelinks.length} sitelinks — recommend ≥4`, recommendation: "Add more sitelinks: Contact, Practice Areas, Testimonials, Free Consultation, Case Results" };
   }),
 
-  // G51 — Callout extensions
+  // G51 — Callout extensions (now automated via API)
   check("G51", "Settings & Targeting", "Callout extensions active (≥4)", "medium", 10, (d) => {
-    const campaigns = d.campaigns ?? [];
-    if (campaigns.length === 0) return { result: "skipped", details: "No campaigns", recommendation: "" };
-    return { result: "warning", details: "Callout extensions require manual verification", recommendation: "Add ≥4 callout extensions highlighting USPs (Free Shipping, 24/7 Support, Money-Back Guarantee)" };
+    const extensions = d.extensions ?? [];
+    if ((d.campaigns ?? []).length === 0) return { result: "skipped", details: "No campaigns", recommendation: "" };
+    const callouts = extensions.filter((e: any) => e.asset?.type === "CALLOUT" || e.customerAsset?.fieldType === "CALLOUT");
+    if (callouts.length === 0) {
+      if (extensions.length === 0) return { result: "warning", details: "Extension data not available", recommendation: "Add ≥4 callout extensions highlighting USPs" };
+      return { result: "fail", details: "No callout extensions found", recommendation: "Add ≥4 callouts: 'Free Consultation', '25+ Years Experience', 'Award-Winning Attorneys', 'Confidential Case Review'" };
+    }
+    if (callouts.length >= 4) return { result: "pass", details: `${callouts.length} callout extensions active`, recommendation: "" };
+    return { result: "warning", details: `Only ${callouts.length} callouts — recommend ≥4`, recommendation: "Add more callouts highlighting USPs and trust signals" };
   }),
 
-  // G52 — Structured snippets
+  // G52 — Structured snippets (now automated via API)
   check("G52", "Settings & Targeting", "Structured snippet extensions active", "medium", 10, (d) => {
-    const campaigns = d.campaigns ?? [];
-    if (campaigns.length === 0) return { result: "skipped", details: "No campaigns", recommendation: "" };
-    return { result: "warning", details: "Structured snippet extensions require manual verification", recommendation: "Add ≥1 structured snippet set (Types, Services, Brands, Features) to provide additional context" };
+    const extensions = d.extensions ?? [];
+    if ((d.campaigns ?? []).length === 0) return { result: "skipped", details: "No campaigns", recommendation: "" };
+    const snippets = extensions.filter((e: any) => e.asset?.type === "STRUCTURED_SNIPPET" || e.customerAsset?.fieldType === "STRUCTURED_SNIPPET");
+    if (snippets.length === 0) {
+      if (extensions.length === 0) return { result: "warning", details: "Extension data not available", recommendation: "Add ≥1 structured snippet set" };
+      return { result: "fail", details: "No structured snippet extensions", recommendation: "Add snippets for 'Services': Divorce, Child Custody, Alimony, Property Division, Prenuptial Agreements" };
+    }
+    return { result: "pass", details: `${snippets.length} structured snippet extensions active`, recommendation: "" };
   }),
 
-  // G53 — Image extensions
+  // G53 — Image extensions (now automated via API)
   check("G53", "Settings & Targeting", "Image extensions active for search", "medium", 10, (d) => {
-    const campaigns = d.campaigns ?? [];
-    const search = campaigns.filter((c: any) => c.campaign?.advertisingChannelType === "SEARCH");
+    const extensions = d.extensions ?? [];
+    const search = (d.campaigns ?? []).filter((c: any) => c.campaign?.advertisingChannelType === "SEARCH");
     if (search.length === 0) return { result: "skipped", details: "No search campaigns", recommendation: "" };
-    return { result: "warning", details: "Image extensions require manual verification", recommendation: "Add image extensions to search campaigns — they increase ad visibility and can improve CTR by 10%" };
+    const images = extensions.filter((e: any) => e.asset?.type === "IMAGE" || e.customerAsset?.fieldType === "IMAGE");
+    if (images.length === 0) {
+      if (extensions.length === 0) return { result: "warning", details: "Extension data not available", recommendation: "Add image extensions to search campaigns" };
+      return { result: "fail", details: "No image extensions found", recommendation: "Add image extensions — they can improve CTR by 10%" };
+    }
+    return { result: "pass", details: `${images.length} image extensions active`, recommendation: "" };
   }),
 
-  // G54 — Call extensions
+  // G54 — Call extensions (now automated via API)
   check("G54", "Settings & Targeting", "Call extensions with tracking (if applicable)", "medium", 10, (d) => {
-    const campaigns = d.campaigns ?? [];
-    if (campaigns.length === 0) return { result: "skipped", details: "No campaigns", recommendation: "" };
-    return { result: "warning", details: "Call extensions require manual verification", recommendation: "Add call extensions with call tracking for phone-based businesses to capture phone leads" };
+    const extensions = d.extensions ?? [];
+    if ((d.campaigns ?? []).length === 0) return { result: "skipped", details: "No campaigns", recommendation: "" };
+    const calls = extensions.filter((e: any) => e.asset?.type === "CALL" || e.customerAsset?.fieldType === "CALL");
+    if (calls.length === 0) {
+      if (extensions.length === 0) return { result: "warning", details: "Extension data not available", recommendation: "Add call extensions with call tracking" };
+      return { result: "fail", details: "No call extensions found — critical for family law lead gen", recommendation: "Add call extensions with call tracking. Phone calls are a primary conversion path for family law" };
+    }
+    return { result: "pass", details: `${calls.length} call extensions active`, recommendation: "" };
   }),
 
-  // G55 — Lead form extensions
+  // G55 — Lead form extensions (now automated via API)
   check("G55", "Settings & Targeting", "Lead form extensions tested (lead gen)", "low", 15, (d) => {
-    const campaigns = d.campaigns ?? [];
-    if (campaigns.length === 0) return { result: "skipped", details: "No campaigns", recommendation: "" };
-    return { result: "warning", details: "Lead form extensions require manual review", recommendation: "Test lead form extensions for lead gen accounts — they can capture leads directly from the SERP" };
+    const extensions = d.extensions ?? [];
+    if ((d.campaigns ?? []).length === 0) return { result: "skipped", details: "No campaigns", recommendation: "" };
+    const leadForms = extensions.filter((e: any) => e.asset?.type === "LEAD_FORM" || e.customerAsset?.fieldType === "LEAD_FORM");
+    if (leadForms.length > 0) return { result: "pass", details: `${leadForms.length} lead form extensions active`, recommendation: "" };
+    if (extensions.length === 0) return { result: "warning", details: "Extension data not available", recommendation: "Test lead form extensions for lead gen" };
+    return { result: "warning", details: "No lead form extensions found", recommendation: "Test lead form extensions — they capture leads directly from the SERP" };
   }),
 
-  // G56 — Audience segments applied
+  // G56 — Audience segments applied (now automated via API)
   check("G56", "Settings & Targeting", "Audience segments in Observation mode", "high", 15, (d) => {
-    const campaigns = d.campaigns ?? [];
-    if (campaigns.length === 0) return { result: "skipped", details: "No campaigns", recommendation: "" };
-    return { result: "warning", details: "Audience segment application requires manual verification", recommendation: "Apply remarketing + in-market audiences in Observation mode to gather data and improve bid optimization" };
+    const audienceCriteria = d.audienceCriteria ?? [];
+    if ((d.campaigns ?? []).length === 0) return { result: "skipped", details: "No campaigns", recommendation: "" };
+    if (audienceCriteria.length === 0) return { result: "warning", details: "No audience segments detected — add in Observation mode", recommendation: "Apply remarketing + in-market audiences in Observation mode to gather data and improve bid optimization" };
+    const campaignIds = new Set(audienceCriteria.map((a: any) => String(a.campaign?.id)));
+    return { result: "pass", details: `Audience segments applied to ${campaignIds.size} campaigns`, recommendation: "" };
   }),
 
-  // G57 — Customer Match lists
+  // G57 — Customer Match lists (now automated via API)
   check("G57", "Settings & Targeting", "Customer Match lists uploaded (<30d)", "high", 20, (d) => {
-    const campaigns = d.campaigns ?? [];
-    if (campaigns.length === 0) return { result: "skipped", details: "No campaigns", recommendation: "" };
-    return { result: "warning", details: "Customer Match list status requires manual verification", recommendation: "Upload and refresh Customer Match lists every 30 days for remarketing and similar audience expansion" };
+    const userLists = d.userLists ?? [];
+    if ((d.campaigns ?? []).length === 0) return { result: "skipped", details: "No campaigns", recommendation: "" };
+    const crmLists = userLists.filter((u: any) => u.userList?.type === "CRM_BASED");
+    if (crmLists.length === 0) {
+      if (userLists.length === 0) return { result: "warning", details: "User list data not available", recommendation: "Upload Customer Match lists every 30 days for remarketing" };
+      return { result: "warning", details: "No CRM-based Customer Match lists found", recommendation: "Upload Customer Match lists from your CRM for remarketing and similar audience expansion" };
+    }
+    const activeLists = crmLists.filter((u: any) => u.userList?.membershipStatus === "OPEN");
+    if (activeLists.length > 0) return { result: "pass", details: `${activeLists.length} active Customer Match lists found`, recommendation: "" };
+    return { result: "warning", details: `${crmLists.length} CRM lists found but none with OPEN status`, recommendation: "Refresh Customer Match lists within the last 30 days to keep them active" };
   }),
 
   // G58 — Placement exclusions
@@ -1156,29 +1271,67 @@ const settingsChecks: CheckFn[] = [
     return { result: "warning", details: "Placement exclusions require manual verification", recommendation: "Add account-level placement exclusions for games, kids apps, MFA sites, and irrelevant mobile apps" };
   }),
 
-  // G59 — Landing page mobile speed
+  // G59 — Landing page mobile speed (now automated via PageSpeed API)
   check("G59", "Settings & Targeting", "Landing page mobile speed (LCP <2.5s)", "high", 30, (d) => {
-    const campaigns = d.campaigns ?? [];
-    if (campaigns.length === 0) return { result: "skipped", details: "No campaigns", recommendation: "" };
-    return { result: "warning", details: "Landing page speed requires manual testing (use PageSpeed Insights)", recommendation: "Achieve mobile LCP <2.5s (ideal <2.0s). Run Google PageSpeed Insights on all landing pages" };
+    const lpAnalysis = d.landingPageAnalysis ?? [];
+    if ((d.campaigns ?? []).length === 0) return { result: "skipped", details: "No campaigns", recommendation: "" };
+    if (lpAnalysis.length === 0) return { result: "warning", details: "Landing page speed data not available", recommendation: "Run Google PageSpeed Insights manually. Target mobile LCP <2.5s" };
+    const withSpeed = lpAnalysis.filter((lp: any) => lp.pageSpeedScore != null);
+    if (withSpeed.length === 0) return { result: "warning", details: "PageSpeed API did not return results", recommendation: "Run PageSpeed Insights manually on landing pages" };
+    const slowPages = withSpeed.filter((lp: any) => lp.lcpMs != null && lp.lcpMs > 2500);
+    const avgScore = withSpeed.reduce((sum: number, lp: any) => sum + (lp.pageSpeedScore ?? 0), 0) / withSpeed.length;
+    if (slowPages.length === 0 && avgScore >= 70) {
+      const details = withSpeed.map((lp: any) => { try { return `${new URL(lp.url).pathname}: ${lp.pageSpeedScore}/100${lp.lcpMs ? `, LCP ${(lp.lcpMs / 1000).toFixed(1)}s` : ""}`; } catch { return `${lp.pageSpeedScore}/100`; } }).join("; ");
+      return { result: "pass", details: `Mobile PageSpeed avg ${avgScore.toFixed(0)}/100. ${details}`, recommendation: "" };
+    }
+    if (slowPages.length > 0) {
+      const details = slowPages.map((lp: any) => { try { return `${new URL(lp.url).hostname}: LCP ${(lp.lcpMs / 1000).toFixed(1)}s (score: ${lp.pageSpeedScore})`; } catch { return `LCP ${(lp.lcpMs / 1000).toFixed(1)}s`; } }).join("; ");
+      return { result: "fail", details: `${slowPages.length} pages with LCP >2.5s: ${details}`, recommendation: "Optimize: compress images, lazy-load below-fold, minimize JavaScript, use a CDN" };
+    }
+    return { result: "warning", details: `Mobile PageSpeed avg ${avgScore.toFixed(0)}/100 — below optimal`, recommendation: "Improve mobile score to 70+ for better Quality Score and lower CPC" };
   }),
 
-  // G60 — Landing page relevance
+  // G60 — Landing page relevance (enhanced with landing page content analysis)
   check("G60", "Settings & Targeting", "Landing page relevance to ad groups", "high", 30, (d) => {
     const keywords = d.keywords ?? [];
+    const lpAnalysis = d.landingPageAnalysis ?? [];
     const scored = keywords.filter((k: any) => k.adGroupCriterion?.qualityInfo?.postClickQualityScore);
-    if (scored.length === 0) return { result: "warning", details: "Landing page relevance requires manual verification", recommendation: "Ensure each landing page H1/title matches the ad group's keyword theme" };
-    const below = scored.filter((k: any) => k.adGroupCriterion.qualityInfo.postClickQualityScore === "BELOW_AVERAGE");
-    const pct = safeDiv(below.length, scored.length) * 100;
-    if (pct < 15) return { result: "pass", details: `${pct.toFixed(0)}% of keywords have below-average landing page quality — acceptable`, recommendation: "" };
-    return { result: "warning", details: `${pct.toFixed(0)}% of keywords report below-average landing page experience`, recommendation: "Improve landing page content relevance — H1 should match ad group theme, add keyword-rich content" };
+    if (scored.length > 0) {
+      const below = scored.filter((k: any) => k.adGroupCriterion.qualityInfo.postClickQualityScore === "BELOW_AVERAGE");
+      const pct = safeDiv(below.length, scored.length) * 100;
+      if (pct < 15) return { result: "pass", details: `${pct.toFixed(0)}% of keywords have below-average landing page quality — acceptable`, recommendation: "" };
+      let extra = "";
+      if (lpAnalysis.length > 0) {
+        const titles = lpAnalysis.map((lp: any) => lp.title).filter(Boolean).map((t: string) => `"${t}"`).join(", ");
+        if (titles) extra = `. Page titles: ${titles}`;
+      }
+      return { result: "warning", details: `${pct.toFixed(0)}% of keywords report below-average landing page experience${extra}`, recommendation: "Improve landing page relevance — each practice area should have a dedicated landing page with matching H1" };
+    }
+    if (lpAnalysis.length > 0 && keywords.length > 0) {
+      const topKW = keywords.filter((k: any) => Number(k.metrics?.impressions ?? 0) > 10).slice(0, 20).map((k: any) => (k.adGroupCriterion?.keyword?.text ?? "").toLowerCase()).filter(Boolean);
+      if (topKW.length > 0) {
+        const pageContent = lpAnalysis.map((lp: any) => `${lp.title} ${lp.h1}`).join(" ").toLowerCase();
+        const matching = topKW.filter((kw: string) => kw.split(" ").some((w: string) => w.length > 3 && pageContent.includes(w)));
+        const pct = safeDiv(matching.length, topKW.length) * 100;
+        if (pct >= 50) return { result: "pass", details: `${pct.toFixed(0)}% of top keywords reflected in landing page titles/H1s`, recommendation: "" };
+        return { result: "warning", details: `Only ${pct.toFixed(0)}% of top keywords found in landing page content`, recommendation: "Create keyword-themed landing pages. Each practice area should have a dedicated page with matching H1" };
+      }
+    }
+    return { result: "warning", details: "Landing page relevance could not be verified", recommendation: "Ensure each landing page H1/title matches the ad group keyword theme" };
   }),
 
-  // G61 — Landing page schema markup
+  // G61 — Landing page schema markup (now automated via HTML scan)
   check("G61", "Settings & Targeting", "Landing page schema markup present", "medium", 20, (d) => {
-    const campaigns = d.campaigns ?? [];
-    if (campaigns.length === 0) return { result: "skipped", details: "No campaigns", recommendation: "" };
-    return { result: "warning", details: "Schema markup cannot be verified via Google Ads API", recommendation: "Add Attorney/LegalService/FAQ schema markup to landing pages for enhanced search presence" };
+    const lpAnalysis = d.landingPageAnalysis ?? [];
+    if ((d.campaigns ?? []).length === 0) return { result: "skipped", details: "No campaigns", recommendation: "" };
+    if (lpAnalysis.length === 0) return { result: "warning", details: "Landing page data not available", recommendation: "Add Attorney/LegalService/FAQ schema markup to landing pages" };
+    const withSchema = lpAnalysis.filter((lp: any) => lp.hasSchemaMarkup);
+    if (withSchema.length === lpAnalysis.length) {
+      const types = [...new Set(lpAnalysis.flatMap((lp: any) => lp.schemaTypes))].join(", ");
+      return { result: "pass", details: `Schema markup on all ${lpAnalysis.length} pages${types ? ` (${types})` : ""}`, recommendation: "" };
+    }
+    if (withSchema.length > 0) return { result: "warning", details: `Schema on ${withSchema.length}/${lpAnalysis.length} pages — some missing`, recommendation: "Add Attorney/LegalService/FAQ schema to ALL landing pages" };
+    return { result: "fail", details: "No schema markup detected on any landing page", recommendation: "Add JSON-LD schema: Attorney, LegalService, FAQPage, LocalBusiness for enhanced search presence" };
   }),
 
   // ── Settings & Extensions Detail Checks (ST01-ST08) ──
@@ -1206,12 +1359,20 @@ const settingsChecks: CheckFn[] = [
     return { result: "fail", details: `${disapproved.length} disapproved ads in active campaigns — these are not serving`, recommendation: "Fix disapproved ads immediately. Review policy violations (legal advertising rules vary by state), correct ad copy, and resubmit for approval" };
   }),
 
-  // ST03 — Language setting = English
+  // ST03 — Language setting = English (now automated via API)
   check("ST03", "Settings & Targeting", "Language targeting set to English", "medium", 5, (d) => {
     const campaigns = d.campaigns ?? [];
+    const langCriteria = d.languageCriteria ?? [];
     if (campaigns.length === 0) return { result: "skipped", details: "No campaigns", recommendation: "" };
-    // Language targeting cannot be directly checked via current GAQL fields — flag for manual review
-    return { result: "warning", details: "Language targeting requires manual verification", recommendation: "Verify all campaigns target English. Other languages should only be added if the firm specifically serves non-English-speaking clients (e.g., Spanish-language family law services)" };
+    if (langCriteria.length === 0) return { result: "warning", details: "Language targeting data not available", recommendation: "Verify all campaigns target English" };
+    // English = languageConstants/1000
+    const nonEnglish = langCriteria.filter((l: any) => {
+      const lc = l.campaignCriterion?.language?.languageConstant ?? "";
+      return lc && !lc.includes("/1000");
+    });
+    if (nonEnglish.length === 0) return { result: "pass", details: "All campaigns target English language", recommendation: "" };
+    const campaignIds = new Set(nonEnglish.map((l: any) => String(l.campaign?.id)));
+    return { result: "warning", details: `${campaignIds.size} campaigns target non-English languages`, recommendation: "Review non-English targeting. Other languages only if the firm serves non-English-speaking clients" };
   }),
 
   // ST04 — Low-income zip code exclusion (family law specific)
@@ -1257,19 +1418,36 @@ const settingsChecks: CheckFn[] = [
     return { result: "warning", details: `${sharedCampaignCount} campaigns share ${shared.length} budget(s) — budget allocation is not independently controlled`, recommendation: "Remove shared budgets and assign individual budgets to each campaign. Shared budgets let Google shift spend unpredictably between campaigns, often favoring lower-value traffic" };
   }),
 
-  // ST07 — Sitelink count and quality
+  // ST07 — Sitelink count and quality (now automated via API)
   check("ST07", "Settings & Targeting", "Sitelinks ≥4 with descriptions", "high", 15, (d) => {
-    const campaigns = d.campaigns ?? [];
-    if (campaigns.length === 0) return { result: "skipped", details: "No campaigns", recommendation: "" };
-    // Sitelink extensions cannot be directly queried via current GAQL — enhanced manual check guidance
-    return { result: "warning", details: "Sitelink configuration requires manual verification", recommendation: "Verify: ≥4 active sitelinks per campaign. Sitelinks should NOT link to homepage or blog posts — use dedicated paid landing pages or key pages (Contact, Testimonials, Case Results). All sitelinks must have description lines filled in" };
+    const extensions = d.extensions ?? [];
+    if ((d.campaigns ?? []).length === 0) return { result: "skipped", details: "No campaigns", recommendation: "" };
+    const sitelinks = extensions.filter((e: any) => e.asset?.type === "SITELINK" || e.customerAsset?.fieldType === "SITELINK");
+    if (sitelinks.length === 0) {
+      if (extensions.length === 0) return { result: "warning", details: "Extension data not available", recommendation: "Verify ≥4 active sitelinks with descriptions" };
+      return { result: "fail", details: "No sitelinks found", recommendation: "Add ≥4 sitelinks with descriptions linking to dedicated landing pages" };
+    }
+    if (sitelinks.length < 4) return { result: "warning", details: `Only ${sitelinks.length} sitelinks — need ≥4`, recommendation: "Add more sitelinks: Contact, Testimonials, Case Results, Free Consultation" };
+    const missingDesc = sitelinks.filter((e: any) => !e.asset?.sitelinkAsset?.description1 && !e.asset?.sitelinkAsset?.description2);
+    if (missingDesc.length === 0) return { result: "pass", details: `${sitelinks.length} sitelinks with descriptions configured`, recommendation: "" };
+    return { result: "warning", details: `${missingDesc.length}/${sitelinks.length} sitelinks missing description lines`, recommendation: "Add description lines to all sitelinks — increases ad space and improves CTR" };
   }),
 
-  // ST08 — Call extension schedule (not showing outside business hours)
+  // ST08 — Call extension schedule (now automated via API)
   check("ST08", "Settings & Targeting", "Call extensions scheduled to business hours", "medium", 10, (d) => {
-    const campaigns = d.campaigns ?? [];
-    if (campaigns.length === 0) return { result: "skipped", details: "No campaigns", recommendation: "" };
-    return { result: "warning", details: "Call extension scheduling requires manual verification", recommendation: "Set call extension ad schedule to business hours only. Showing a phone number outside business hours leads to missed calls and wasted clicks — use form-only landing pages after hours" };
+    const extensions = d.extensions ?? [];
+    if ((d.campaigns ?? []).length === 0) return { result: "skipped", details: "No campaigns", recommendation: "" };
+    const calls = extensions.filter((e: any) => e.asset?.type === "CALL" || e.customerAsset?.fieldType === "CALL");
+    if (calls.length === 0) {
+      if (extensions.length === 0) return { result: "warning", details: "Extension data not available", recommendation: "Set call extension schedule to business hours" };
+      return { result: "skipped", details: "No call extensions to check scheduling", recommendation: "" };
+    }
+    const withSchedule = calls.filter((e: any) => {
+      const targets = e.asset?.callAsset?.adScheduleTargets;
+      return targets && (Array.isArray(targets) ? targets.length > 0 : true);
+    });
+    if (withSchedule.length > 0) return { result: "pass", details: `${withSchedule.length} call extensions have schedule restrictions`, recommendation: "" };
+    return { result: "warning", details: "Call extensions showing 24/7 — no schedule restrictions detected", recommendation: "Set call schedule to business hours only. After-hours calls lead to wasted clicks and missed leads" };
   }),
 ];
 
