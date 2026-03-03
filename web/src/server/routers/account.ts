@@ -21,7 +21,7 @@ export const accountRouter = router({
 
   /** Add a customer ID manually — copies tokens from the "oauth-connected" placeholder row */
   addManual: protectedProcedure
-    .input(z.object({ customerId: z.string().min(5).max(15) }))
+    .input(z.object({ customerId: z.string().min(5).max(15), clientId: z.string().uuid().optional() }))
     .mutation(async ({ ctx, input }) => {
       // Normalise: strip dashes
       const cid = input.customerId.replace(/-/g, "");
@@ -55,6 +55,7 @@ export const accountRouter = router({
         .insert(connections)
         .values({
           userId: ctx.userId,
+          clientId: input.clientId ?? null,
           platform: "google_ads",
           externalId: cid,
           accountName,
@@ -96,6 +97,7 @@ export const accountRouter = router({
             customerName: z.string(),
           })
         ),
+        clientId: z.string().uuid().optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -127,6 +129,7 @@ export const accountRouter = router({
         if (existingCids.has(cid)) continue;
         await db.insert(connections).values({
           userId: ctx.userId,
+          clientId: input.clientId ?? null,
           platform: "google_ads",
           externalId: cid,
           accountName: acct.customerName,
@@ -137,6 +140,28 @@ export const accountRouter = router({
         added.push(cid);
       }
       return { added };
+    }),
+
+  /** Assign or reassign a connection to a client */
+  assignClient: protectedProcedure
+    .input(
+      z.object({
+        connectionId: z.string().uuid(),
+        clientId: z.string().uuid().nullable(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const [updated] = await db
+        .update(connections)
+        .set({ clientId: input.clientId, updatedAt: new Date() })
+        .where(
+          and(
+            eq(connections.id, input.connectionId),
+            eq(connections.userId, ctx.userId)
+          )
+        )
+        .returning();
+      return updated;
     }),
 
   disconnect: protectedProcedure

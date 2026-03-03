@@ -15,9 +15,11 @@ import {
   ChevronDown,
   Building2,
   Users,
+  Tag,
 } from "lucide-react";
 import { useState } from "react";
 import { useSearchParams } from "next/navigation";
+import Link from "next/link";
 
 /* ─── MCC Drill-Down Component ───────────────────────────── */
 
@@ -217,7 +219,11 @@ export default function ConnectPage() {
   const count = searchParams.get("count");
   const manual = searchParams.get("manual");
   const accounts = trpc.account.list.useQuery();
+  const clientsQuery = trpc.clients.list.useQuery();
   const disconnect = trpc.account.disconnect.useMutation({
+    onSuccess: () => accounts.refetch(),
+  });
+  const assignClient = trpc.account.assignClient.useMutation({
     onSuccess: () => accounts.refetch(),
   });
   const addManual = trpc.account.addManual.useMutation({
@@ -238,6 +244,7 @@ export default function ConnectPage() {
   });
   const runAudit = trpc.audit.run.useMutation();
 
+  const [selectedClientId, setSelectedClientId] = useState<string | "">("");
   const [runningFor, setRunningFor] = useState<string | null>(null);
   const [showManual, setShowManual] = useState(manual === "true");
   const [showMccBrowser, setShowMccBrowser] = useState(false);
@@ -248,6 +255,13 @@ export default function ConnectPage() {
 
   const mccId = process.env.NEXT_PUBLIC_GOOGLE_ADS_LOGIN_CUSTOMER_ID ?? "";
 
+  const clientsList = clientsQuery.data ?? [];
+  const clientMap = new Map(clientsList.map((c) => [c.id, c]));
+
+  const selectedClientName = selectedClientId
+    ? clientMap.get(selectedClientId)?.name
+    : undefined;
+
   const handleAddManual = () => {
     setManualError(null);
     setManualSuccess(false);
@@ -256,11 +270,17 @@ export default function ConnectPage() {
       setManualError("Enter a valid Google Ads Customer ID (e.g. 123-456-7890)");
       return;
     }
-    addManual.mutate({ customerId: cleaned });
+    addManual.mutate({
+      customerId: cleaned,
+      clientId: selectedClientId || undefined,
+    });
   };
 
   const handleConnect = () => {
-    window.location.href = "/api/google";
+    const url = selectedClientId
+      ? `/api/google?clientId=${encodeURIComponent(selectedClientId)}`
+      : "/api/google";
+    window.location.href = url;
   };
 
   const handleRunAudit = async (accountId: string) => {
@@ -287,6 +307,42 @@ export default function ConnectPage() {
           Connect and manage your Google Ads accounts for auditing
         </p>
       </div>
+
+      {/* Client selector */}
+      {clientsList.length > 0 && (
+        <div className="flex items-center gap-3 rounded-lg border border-brand-subtle bg-brand-wash/50 p-4">
+          <Tag className="h-4 w-4 text-brand" strokeWidth={1.75} />
+          <div className="flex flex-1 items-center gap-2">
+            <label
+              htmlFor="client-select"
+              className="text-small font-medium text-text-primary whitespace-nowrap"
+            >
+              Assign new connections to:
+            </label>
+            <select
+              id="client-select"
+              value={selectedClientId}
+              onChange={(e) => setSelectedClientId(e.target.value)}
+              className="flex-1 max-w-xs rounded-md border border-border-light bg-white px-3 py-1.5 text-small text-text-primary outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2"
+            >
+              <option value="">No client (unassigned)</option>
+              {clientsList.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          {selectedClientName && (
+            <Link
+              href={`/clients/${selectedClientId}`}
+              className="text-caption font-medium text-brand hover:text-brand-light transition-colors"
+            >
+              View client →
+            </Link>
+          )}
+        </div>
+      )}
 
       {/* Status messages */}
       {error && (
@@ -390,7 +446,10 @@ export default function ConnectPage() {
               existingCids={existingCids}
               onAdd={(accts) => {
                 setMccAddResult(null);
-                addFromMcc.mutate({ accounts: accts });
+                addFromMcc.mutate({
+                  accounts: accts,
+                  clientId: selectedClientId || undefined,
+                });
               }}
             />
           </div>
@@ -476,67 +535,103 @@ export default function ConnectPage() {
         </div>
       ) : (
         <div className="space-y-3">
-          {accounts.data.map((account) => (
-            <div
-              key={account.id}
-              className="flex items-center justify-between rounded-lg border border-border-light bg-white p-5 shadow-sm"
-            >
-              <div className="flex items-center gap-4">
-                <div className="rounded-md bg-green-50 p-2 text-green-600">
-                  <CheckCircle2 className="h-5 w-5" strokeWidth={1.75} />
-                </div>
-                <div>
-                  <p className="text-body font-semibold text-text-primary">
-                    {account.accountName ?? "Google Ads Account"}
-                  </p>
-                  <p className="text-small text-text-secondary">
-                    Customer ID: {account.externalId}
-                  </p>
-                </div>
-              </div>
+          {accounts.data.map((account) => {
+            const acctClientId = (account as { clientId?: string | null }).clientId;
+            const acctClient = acctClientId ? clientMap.get(acctClientId) : null;
+            return (
+              <div
+                key={account.id}
+                className="rounded-lg border border-border-light bg-white shadow-sm"
+              >
+                <div className="flex items-center justify-between p-5">
+                  <div className="flex items-center gap-4">
+                    <div className="rounded-md bg-green-50 p-2 text-green-600">
+                      <CheckCircle2 className="h-5 w-5" strokeWidth={1.75} />
+                    </div>
+                    <div>
+                      <p className="text-body font-semibold text-text-primary">
+                        {account.accountName ?? "Google Ads Account"}
+                      </p>
+                      <p className="text-small text-text-secondary">
+                        Customer ID: {account.externalId}
+                      </p>
+                    </div>
+                  </div>
 
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() =>
-                    handleRunAudit(account.id)
-                  }
-                  disabled={runningFor === account.id}
-                  className="inline-flex items-center gap-1.5 rounded-md bg-brand px-3.5 py-2 text-caption font-semibold text-white hover:bg-brand-light disabled:opacity-50 transition-colors"
-                >
-                  {runningFor === account.id ? (
-                    <>
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      Running…
-                    </>
-                  ) : (
-                    <>
-                      <PlayCircle className="h-3.5 w-3.5" strokeWidth={1.75} />
-                      Run Audit
-                    </>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() =>
+                        handleRunAudit(account.id)
+                      }
+                      disabled={runningFor === account.id}
+                      className="inline-flex items-center gap-1.5 rounded-md bg-brand px-3.5 py-2 text-caption font-semibold text-white hover:bg-brand-light disabled:opacity-50 transition-colors"
+                    >
+                      {runningFor === account.id ? (
+                        <>
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          Running…
+                        </>
+                      ) : (
+                        <>
+                          <PlayCircle className="h-3.5 w-3.5" strokeWidth={1.75} />
+                          Run Audit
+                        </>
+                      )}
+                    </button>
+
+                    <a
+                      href={`https://ads.google.com/aw/overview?ocid=${account.externalId}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      aria-label="Open in Google Ads"
+                      className="rounded-md border border-border-light p-2 text-text-secondary hover:text-brand hover:border-brand transition-colors"
+                    >
+                      <ExternalLink className="h-4 w-4" strokeWidth={1.75} />
+                    </a>
+
+                    <button
+                      onClick={() => disconnect.mutate({ accountId: account.id })}
+                      disabled={disconnect.isPending}
+                      aria-label="Disconnect account"
+                      className="rounded-md border border-border-light p-2 text-text-secondary hover:text-red-600 hover:border-red-300 transition-colors"
+                    >
+                      <Trash2 className="h-4 w-4" strokeWidth={1.75} />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Client assignment row */}
+                <div className="flex items-center gap-2 border-t border-border-light bg-surface/50 px-5 py-2.5">
+                  <Building2 className="h-3.5 w-3.5 text-text-placeholder" strokeWidth={1.75} />
+                  <select
+                    value={acctClientId ?? ""}
+                    onChange={(e) => {
+                      assignClient.mutate({
+                        connectionId: account.id,
+                        clientId: e.target.value || null,
+                      });
+                    }}
+                    className="rounded border border-border-light bg-white px-2 py-1 text-caption text-text-primary outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-1"
+                  >
+                    <option value="">Unassigned</option>
+                    {clientsList.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
+                  {acctClient && (
+                    <Link
+                      href={`/clients/${acctClientId}`}
+                      className="ml-auto text-caption font-medium text-brand hover:text-brand-light transition-colors"
+                    >
+                      View {acctClient.name} →
+                    </Link>
                   )}
-                </button>
-
-                <a
-                  href={`https://ads.google.com/aw/overview?ocid=${account.externalId}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  aria-label="Open in Google Ads"
-                  className="rounded-md border border-border-light p-2 text-text-secondary hover:text-brand hover:border-brand transition-colors"
-                >
-                  <ExternalLink className="h-4 w-4" strokeWidth={1.75} />
-                </a>
-
-                <button
-                  onClick={() => disconnect.mutate({ accountId: account.id })}
-                  disabled={disconnect.isPending}
-                  aria-label="Disconnect account"
-                  className="rounded-md border border-border-light p-2 text-text-secondary hover:text-red-600 hover:border-red-300 transition-colors"
-                >
-                  <Trash2 className="h-4 w-4" strokeWidth={1.75} />
-                </button>
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

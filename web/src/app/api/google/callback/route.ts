@@ -24,11 +24,13 @@ export async function GET(req: NextRequest) {
   }
 
   let userId: string;
+  let clientId: string | undefined;
   try {
     const state = JSON.parse(
       Buffer.from(stateParam, "base64url").toString("utf-8")
     );
     userId = state.userId;
+    clientId = state.clientId;
   } catch {
     return NextResponse.redirect(
       new URL("/connect?error=invalid_state", process.env.NEXT_PUBLIC_APP_URL!)
@@ -82,6 +84,7 @@ export async function GET(req: NextRequest) {
             const cid = String(cc.id);
             await db.insert(connections).values({
               userId,
+              clientId: clientId ?? null,
               platform: "google_ads",
               externalId: cid,
               accountName: cc.descriptiveName ?? `Account ${cid}`,
@@ -103,6 +106,7 @@ export async function GET(req: NextRequest) {
     if (customers.length === 0) {
       await db.insert(connections).values({
         userId,
+        clientId: clientId ?? null,
         platform: "google_ads",
         externalId: "oauth-connected",
         accountName: "OAuth connected — add account IDs manually",
@@ -132,6 +136,7 @@ export async function GET(req: NextRequest) {
         const accountName = await adsService.getCustomerName(customerId);
         await db.insert(connections).values({
           userId,
+          clientId: clientId ?? null,
           platform: "google_ads",
           externalId: customerId,
           accountName,
