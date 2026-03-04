@@ -751,6 +751,11 @@ const structureChecks: CheckFn[] = [
     const keywords = d.keywords ?? [];
     if (keywords.length === 0) return { result: "skipped", details: "No keyword data", recommendation: "" };
 
+    // Only analyze ENABLED keywords — paused/removed are invisible to the user
+    // and don't affect ad serving
+    const activeKeywords = keywords.filter((k: any) => k.adGroupCriterion?.status === "ENABLED");
+    if (activeKeywords.length === 0) return { result: "skipped", details: "No active keywords", recommendation: "" };
+
     // PPC stop words — common modifiers that don't indicate theme
     const stopWords = new Set([
       "lawyer", "lawyers", "attorney", "attorneys", "law", "firm", "legal",
@@ -763,7 +768,7 @@ const structureChecks: CheckFn[] = [
 
     // Group keywords by ad group, collecting texts + track ad group name
     const kwByGroup = new Map<string, { name: string; texts: string[] }>();
-    for (const k of keywords) {
+    for (const k of activeKeywords) {
       const agId = String(k.adGroup?.id ?? k.campaign?.id ?? "unknown");
       const agName = k.adGroup?.name ?? k.campaign?.name ?? agId;
       const text = (k.adGroupCriterion?.keyword?.text ?? "").toLowerCase().trim();
@@ -807,7 +812,7 @@ const structureChecks: CheckFn[] = [
       }
 
       if (itemIssues.length > 0) {
-        issueItems.push(`Ad Group "${group.name}" \u2014 ${itemIssues.join("; ")}`);
+        issueItems.push(`Ad Group "${group.name}" (${group.texts.length} active kw) \u2014 ${itemIssues.join("; ")}`);
       }
     }
 
