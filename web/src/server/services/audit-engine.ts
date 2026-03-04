@@ -239,9 +239,15 @@ const conversionChecks: CheckFn[] = [
   // G-CT1 — No duplicate conversion counting
   check("G-CT1", "Conversion Tracking", "No duplicate conversion counting", "critical", 15, (d) => {
     const convs = d.conversions ?? [];
+    // Only consider ENABLED conversion actions — HIDDEN / REMOVED actions
+    // are disabled and can't cause double-counting even if names collide.
+    const enabledConvs = convs.filter((c: any) => {
+      const status = c.conversionAction?.status;
+      return status !== "HIDDEN" && status !== "REMOVED";
+    });
     // Group conversion actions by lowercased name
     const byName = new Map<string, any[]>();
-    for (const c of convs) {
+    for (const c of enabledConvs) {
       const name = (c.conversionAction?.name ?? "").toLowerCase();
       if (!name) continue;
       if (!byName.has(name)) byName.set(name, []);
@@ -249,7 +255,7 @@ const conversionChecks: CheckFn[] = [
     }
     // Find names with more than one entry
     const dupeGroups = [...byName.entries()].filter(([, group]) => group.length > 1);
-    if (dupeGroups.length === 0) return { result: "pass", details: "No duplicate conversion names detected", recommendation: "" };
+    if (dupeGroups.length === 0) return { result: "pass", details: "No duplicate conversion names detected among enabled actions", recommendation: "" };
 
     // Build detailed diagnostic for each duplicate group
     const dupeItems: string[] = [];
