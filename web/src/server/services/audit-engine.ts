@@ -775,8 +775,7 @@ const structureChecks: CheckFn[] = [
       "local", "office", "county", "state", "city",
     ]);
 
-    // Group UNIQUE keywords by ad group — keyword_view returns one row per
-    // Group keywords by ad group, collecting texts + track ad group name
+    // Group UNIQUE keywords by ad group, collecting texts + track ad group name
     // (keywords are already deduplicated at the source in fetchKeywords)
     const kwByGroup = new Map<string, { name: string; texts: string[] }>();
     for (const k of activeKeywords) {
@@ -823,7 +822,12 @@ const structureChecks: CheckFn[] = [
       }
 
       if (itemIssues.length > 0) {
-        issueItems.push(`Ad Group "${group.name}" (${group.texts.length} active kw) \u2014 ${itemIssues.join("; ")}`);
+        // Show actual keywords (up to 10) so user can verify count accuracy
+        const kwSample = group.texts.length <= 10
+          ? group.texts.map(t => `"${t}"`).join(", ")
+          : group.texts.slice(0, 10).map(t => `"${t}"`).join(", ") + ` …+${group.texts.length - 10} more`;
+        issueItems.push(`keywords: ${kwSample}`);
+        issueItems.push(`Ad Group "${group.name}" (${group.texts.length} active kw) — ${itemIssues.join("; ")}`);
       }
     }
 
