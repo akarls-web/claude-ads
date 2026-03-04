@@ -620,11 +620,17 @@ const wastedSpendChecks: CheckFn[] = [
   // G17 — Broad Match + Manual CPC pairing
   check("G17", "Wasted Spend", "No Broad Match + Manual CPC pairing", "critical", 5, (d) => {
     const keywords = d.keywords ?? [];
-    const broadManual = keywords.filter((k: any) =>
-      k.adGroupCriterion?.keyword?.matchType === "BROAD" &&
-      k.campaign?.biddingStrategyType === "MANUAL_CPC"
-    );
-    if (broadManual.length === 0) return { result: "pass", details: "No broad match keywords using Manual CPC", recommendation: "" };
+    // Filter to true broad match only (exclude legacy modified broad match with + prefixes)
+    const broadManual = keywords.filter((k: any) => {
+      if (k.adGroupCriterion?.keyword?.matchType !== "BROAD") return false;
+      if (k.campaign?.biddingStrategyType !== "MANUAL_CPC") return false;
+      // Exclude legacy BMM: every word has + prefix → behaves as phrase match now
+      const text = (k.adGroupCriterion?.keyword?.text ?? "").trim();
+      const words = text.split(/\s+/).filter(Boolean);
+      if (words.length > 0 && words.every((w: string) => w.startsWith("+"))) return false;
+      return true;
+    });
+    if (broadManual.length === 0) return { result: "pass", details: "No true broad match keywords using Manual CPC", recommendation: "" };
     // Group by ad group
     const agMap = new Map<string, { name: string; sample: string; count: number }>();
     for (const k of broadManual) {
@@ -1131,9 +1137,27 @@ const structureChecks: CheckFn[] = [
     if (keywords.length === 0) return { result: "skipped", details: "No keyword data", recommendation: "" };
     const broad = keywords.filter((k: any) => k.adGroupCriterion?.keyword?.matchType === "BROAD");
     if (broad.length === 0) return { result: "pass", details: "No broad match keywords in use", recommendation: "" };
-    // Check if broad match is mixed with phrase/exact in same ad group
+
+    // Detect legacy modified broad match (keywords with + prefix on every word).
+    // Google deprecated BMM in 2021 and they now behave as phrase match, but the
+    // API still reports matchType = "BROAD". Don't flag these as true broad match.
+    const trueBroad = broad.filter((k: any) => {
+      const text = (k.adGroupCriterion?.keyword?.text ?? "").trim();
+      // Modified broad match has + before each word, e.g. "+divorce +lawyer +madison"
+      // If every word starts with +, it's legacy BMM (now phrase match behavior)
+      const words = text.split(/\s+/).filter(Boolean);
+      if (words.length === 0) return true; // can't determine, treat as broad
+      const allModified = words.every((w: string) => w.startsWith("+"));
+      return !allModified; // true broad = NOT modified broad
+    });
+
+    if (trueBroad.length === 0) {
+      return { result: "pass", details: `${broad.length} keywords reported as broad match are legacy modified broad match (now behave as phrase match) — no action needed`, recommendation: "" };
+    }
+
+    // Check if true broad match is mixed with phrase/exact in same ad group
     const broadAGs = new Map<string, string>();
-    for (const k of broad) {
+    for (const k of trueBroad) {
       const agId = String(k.adGroup?.id);
       if (!broadAGs.has(agId)) broadAGs.set(agId, k.adGroup?.name ?? "Unknown");
     }
@@ -1142,7 +1166,7 @@ const structureChecks: CheckFn[] = [
       const hasNonBroad = keywords.some((k: any) => String(k.adGroup?.id) === agId && k.adGroupCriterion?.keyword?.matchType !== "BROAD");
       if (hasNonBroad) mixedAGs.push(agName);
     }
-    if (mixedAGs.length === 0) return { result: "pass", details: `${broad.length} broad match keywords properly isolated in their own ad groups`, recommendation: "" };
+    if (mixedAGs.length === 0) return { result: "pass", details: `${trueBroad.length} true broad match keywords properly isolated in their own ad groups`, recommendation: "" };
     const mixItems = mixedAGs.map(name => `Ad Group "${name}" — broad match mixed with phrase/exact match keywords`);
     return { result: "fail", details: entityDetails(mixItems), recommendation: "Isolate broad match keywords into their own ad groups or campaigns. Mixing match types causes broad match to cannibalize exact/phrase match traffic" };
   }),
