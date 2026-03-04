@@ -1129,16 +1129,16 @@ const structureChecks: CheckFn[] = [
     const search = campaigns.filter((c: any) => c.campaign?.advertisingChannelType === "SEARCH" && c.campaign?.status === "ENABLED");
     if (search.length === 0) return { result: "skipped", details: "No active search campaigns", recommendation: "" };
     const displayOn = search.filter((c: any) => c.campaign?.networkSettings?.targetContentNetwork === true);
-    const partnersOn = search.filter((c: any) => c.campaign?.networkSettings?.targetSearchNetwork === true);
+    const partnersOff = search.filter((c: any) => c.campaign?.networkSettings?.targetSearchNetwork !== true);
     if (displayOn.length > 0) {
       const dispItems = displayOn.map((c: any) => `Campaign "${c.campaign?.name ?? 'Unknown'}" — Display Network is ON (wastes Search budget)`);
       return { result: "fail", details: entityDetails(dispItems), recommendation: "Disable Display Network on all Search campaigns immediately — use separate Display/PMax for display inventory" };
     }
-    if (partnersOn.length > 0) {
-      const partItems = partnersOn.map((c: any) => `Campaign "${c.campaign?.name ?? 'Unknown'}" — Search Partners enabled (monitor performance)`);
-      return { result: "warning", details: entityDetails(partItems), recommendation: "Compare Search Partners vs Google Search performance — disable partners if CPA is >50% higher" };
+    if (partnersOff.length > 0) {
+      const partItems = partnersOff.map((c: any) => `Campaign "${c.campaign?.name ?? 'Unknown'}" — Search Partners disabled (missing additional reach)`);
+      return { result: "warning", details: entityDetails(partItems), recommendation: "Enable Search Partners for additional reach at typically lower CPCs — monitor CPA and disable if performance degrades" };
     }
-    return { result: "pass", details: "Search campaigns have Display Network disabled and Partners monitored", recommendation: "" };
+    return { result: "pass", details: "Search campaigns have Display Network disabled and Search Partners enabled", recommendation: "" };
   }),
 
   // FL03 — Intent mix in ad groups (research vs buyer keywords)
