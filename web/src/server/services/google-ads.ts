@@ -221,6 +221,8 @@ export class GoogleAdsService {
       SELECT
         search_term_view.search_term,
         search_term_view.status,
+        ad_group.id,
+        ad_group.name,
         campaign.id,
         campaign.name,
         metrics.impressions,
@@ -228,8 +230,7 @@ export class GoogleAdsService {
         metrics.cost_micros,
         metrics.conversions
       FROM search_term_view
-      WHERE ad_group.status != 'REMOVED'
-        AND campaign.status = 'ENABLED'
+      WHERE campaign.status = 'ENABLED'
         AND segments.date DURING LAST_90_DAYS
       ORDER BY metrics.cost_micros DESC
       LIMIT 500
