@@ -233,7 +233,7 @@ export class GoogleAdsService {
         metrics.cost_micros,
         metrics.conversions
       FROM search_term_view
-      WHERE segments.date DURING LAST_90_DAYS
+      WHERE segments.date DURING LAST_30_DAYS
       LIMIT 2000
     `);
     // Return top 500 by cost
@@ -470,7 +470,7 @@ export class GoogleAdsService {
   async fetchAssetGroupSignals(customerId: string) {
     return this.query(customerId, `
       SELECT
-        asset_group_signal.audience_signal,
+        asset_group_signal.resource_name,
         asset_group.id,
         asset_group.name,
         campaign.id

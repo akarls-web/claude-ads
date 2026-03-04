@@ -766,13 +766,14 @@ const structureChecks: CheckFn[] = [
     const keywords = d.keywords ?? [];
     if (keywords.length === 0) return { result: "skipped", details: "No keyword data", recommendation: "" };
 
-    // Only analyze ENABLED keywords in ENABLED ad groups — paused ad groups
-    // and paused keywords are invisible to the user and don't affect ad serving.
-    // The GAQL query includes paused ad groups (status != REMOVED), so we must
-    // filter here.
+    // Only analyze ENABLED keywords in ENABLED ad groups that have actually
+    // served (impressions > 0). Zero-impression keywords are either newly added,
+    // low ad rank, or effectively dormant — they don't affect ad serving and
+    // shouldn't trigger theme/count analysis.
     const activeKeywords = keywords.filter((k: any) =>
       k.adGroupCriterion?.status === "ENABLED" &&
-      k.adGroup?.status === "ENABLED"
+      k.adGroup?.status === "ENABLED" &&
+      Number(k.metrics?.impressions ?? 0) > 0
     );
     if (activeKeywords.length === 0) return { result: "skipped", details: "No active keywords", recommendation: "" };
 
