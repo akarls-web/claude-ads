@@ -86,6 +86,23 @@ function entityDetails(items: string[], max = 3): string {
   return items.slice(0, max).join("\n") + `\n…and ${items.length - max} more`;
 }
 
+/**
+ * Look up fetchErrors from the audit data for the given data keys.
+ * Returns a human-readable suffix if any of those fetches failed, or empty string.
+ */
+function fetchErrorHint(data: AuditData, ...keys: string[]): string {
+  const errors = data.fetchErrors as Record<string, string> | undefined;
+  if (!errors) return "";
+  for (const key of keys) {
+    if (errors[key]) {
+      // Truncate very long error messages
+      const msg = errors[key].length > 200 ? errors[key].slice(0, 200) + "…" : errors[key];
+      return ` (API fetch "${key}" failed: ${msg})`;
+    }
+  }
+  return "";
+}
+
 function check(
   id: string,
   category: string,
@@ -536,7 +553,7 @@ const wastedSpendChecks: CheckFn[] = [
   // G16 — Wasted spend on irrelevant terms (<5%)
   check("G16", "Wasted Spend", "Wasted spend on irrelevant terms (<5%)", "critical", 15, (d) => {
     const searchTerms = d.searchTerms ?? [];
-    if (searchTerms.length === 0) return { result: "skipped", details: "No search term data available", recommendation: "" };
+    if (searchTerms.length === 0) return { result: "skipped", details: "No search term data available" + fetchErrorHint(d, "searchTerms"), recommendation: "" };
     const totalCost = searchTerms.reduce((sum: number, st: any) => sum + microsToValue(st.metrics?.costMicros), 0);
     const noConvTerms = searchTerms.filter((st: any) => Number(st.metrics?.conversions ?? 0) === 0 && microsToValue(st.metrics?.costMicros) > 0);
     const wastedCost = noConvTerms.reduce((sum: number, st: any) => sum + microsToValue(st.metrics?.costMicros), 0);
@@ -570,7 +587,7 @@ const wastedSpendChecks: CheckFn[] = [
   check("G18", "Wasted Spend", "Close variant pollution controlled", "high", 15, (d) => {
     const searchTerms = d.searchTerms ?? [];
     const keywords = d.keywords ?? [];
-    if (searchTerms.length === 0 || keywords.length === 0) return { result: "skipped", details: "Insufficient data for close variant analysis", recommendation: "" };
+    if (searchTerms.length === 0 || keywords.length === 0) return { result: "skipped", details: "Insufficient data for close variant analysis" + fetchErrorHint(d, "searchTerms", "keywords"), recommendation: "" };
     // Check for search terms that don't match any keyword (rough heuristic)
     const kwTexts = new Set(keywords.map((k: any) => (k.adGroupCriterion?.keyword?.text ?? "").toLowerCase()));
     const nonExact = searchTerms.filter((st: any) => {
@@ -587,7 +604,7 @@ const wastedSpendChecks: CheckFn[] = [
   check("G19", "Wasted Spend", "Search term visibility (>60% visible)", "medium", 10, (d) => {
     const searchTerms = d.searchTerms ?? [];
     const campaigns = d.campaigns ?? [];
-    if (searchTerms.length === 0) return { result: "skipped", details: "No search term data", recommendation: "" };
+    if (searchTerms.length === 0) return { result: "skipped", details: "No search term data" + fetchErrorHint(d, "searchTerms"), recommendation: "" };
     const searchCampaigns = campaigns.filter((c: any) => c.campaign?.advertisingChannelType === "SEARCH");
     const totalSpend = searchCampaigns.reduce((sum: number, c: any) => sum + microsToValue(c.metrics?.costMicros), 0);
     const visibleSpend = searchTerms.reduce((sum: number, st: any) => sum + microsToValue(st.metrics?.costMicros), 0);
@@ -2018,6 +2035,27 @@ const ALL_CHECKS: CheckFn[] = [
 
 export function runAudit(data: AuditData): AuditReport {
   const checks = ALL_CHECKS.map((fn) => fn(data));
+
+  // ── Data Fetch Health Check ──────────────────────────────
+  // If any API fetches failed, add a diagnostic check so the user knows
+  const fetchErrors = data.fetchErrors as Record<string, string> | undefined;
+  if (fetchErrors && Object.keys(fetchErrors).length > 0) {
+    const errorItems = Object.entries(fetchErrors).map(([key, msg]) => {
+      const truncated = msg.length > 200 ? msg.slice(0, 200) + "…" : msg;
+      return `"${key}" — ${truncated}`;
+    });
+    checks.push({
+      checkId: "G-SYS1",
+      category: "Settings & Targeting",
+      description: "All API data sources accessible",
+      result: "warning",
+      severity: "high",
+      details: `${errorItems.length} data source(s) failed to load:\n${errorItems.join("\n")}\n\nChecks depending on this data were skipped. This may be caused by API permissions, account access level, or temporary errors. Re-running the audit may resolve transient issues.`,
+      recommendation: "Verify the Google Ads API connection has full read access. If using an MCC, ensure the child account is linked. For search_term_view access, the API token needs Standard access level (not Basic).",
+      isQuickWin: false,
+      estimatedFixMinutes: 15,
+    });
+  }
 
   const passCount = checks.filter((c) => c.result === "pass").length;
   const warningCount = checks.filter((c) => c.result === "warning").length;

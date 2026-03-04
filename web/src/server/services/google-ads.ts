@@ -441,11 +441,16 @@ export class GoogleAdsService {
 
   /** Fetch all data needed for a full 111-check audit */
   async fetchAllAuditData(customerId: string) {
+    /** Track which fetches failed and why — surfaced in audit report */
+    const fetchErrors: Record<string, string> = {};
+
     const safe = async <T>(label: string, fn: () => Promise<T>): Promise<T | []> => {
       try {
         return await fn();
       } catch (err) {
-        console.warn(`[fetchAllAuditData] ${label} failed for ${customerId}:`, err instanceof Error ? err.message : err);
+        const msg = err instanceof Error ? err.message : String(err);
+        console.warn(`[fetchAllAuditData] ${label} failed for ${customerId}:`, msg);
+        fetchErrors[label] = msg;
         return [];
       }
     };
@@ -526,6 +531,7 @@ export class GoogleAdsService {
       assetGroupAssets,
       assetGroupSignals,
       landingPageAnalysis,
+      fetchErrors,
       fetchedAt: new Date().toISOString(),
     };
   }

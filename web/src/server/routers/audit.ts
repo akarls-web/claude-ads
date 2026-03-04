@@ -191,6 +191,7 @@ export const auditRouter = router({
         // Build a lightweight data summary (skip bulky raw rows to stay under Neon's 64 MB limit)
         const dataSummary = {
           fetchedAt: rawData.fetchedAt,
+          fetchErrors: rawData.fetchErrors ?? {},
           categoryScores: report.categoryScores,
           counts: {
             campaigns: Array.isArray(rawData.campaigns) ? rawData.campaigns.length : 0,
