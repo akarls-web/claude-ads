@@ -189,7 +189,7 @@ export class GoogleAdsService {
   }
 
   async fetchKeywords(customerId: string) {
-    return this.query(customerId, `
+    const rows = await this.query(customerId, `
       SELECT
         ad_group_criterion.keyword.text,
         ad_group_criterion.keyword.match_type,
@@ -214,6 +214,42 @@ export class GoogleAdsService {
         AND campaign.status = 'ENABLED'
         AND segments.date DURING LAST_30_DAYS
     `);
+
+    // keyword_view + segments.date returns one row per keyword PER DAY.
+    // Deduplicate by (ad_group.id + keyword.text + match_type), aggregating metrics.
+    const deduped = new Map<string, GoogleAdsRow>();
+    for (const row of rows) {
+      const agId = String(row.adGroup?.id ?? "");
+      const text = row.adGroupCriterion?.keyword?.text ?? "";
+      const matchType = row.adGroupCriterion?.keyword?.matchType ?? "";
+      const key = `${agId}::${text}::${matchType}`;
+
+      if (!deduped.has(key)) {
+        // Clone the row so we don't mutate the original, with metrics as numbers
+        deduped.set(key, {
+          ...row,
+          metrics: {
+            impressions: Number(row.metrics?.impressions ?? 0),
+            clicks: Number(row.metrics?.clicks ?? 0),
+            costMicros: Number(row.metrics?.costMicros ?? 0),
+            conversions: Number(row.metrics?.conversions ?? 0),
+            averageCpc: Number(row.metrics?.averageCpc ?? 0),
+          },
+        });
+      } else {
+        // Aggregate metrics across days
+        const existing = deduped.get(key)!;
+        existing.metrics.impressions += Number(row.metrics?.impressions ?? 0);
+        existing.metrics.clicks += Number(row.metrics?.clicks ?? 0);
+        existing.metrics.costMicros += Number(row.metrics?.costMicros ?? 0);
+        existing.metrics.conversions += Number(row.metrics?.conversions ?? 0);
+        // averageCpc: keep last non-zero value (daily average isn't summable)
+        const cpc = Number(row.metrics?.averageCpc ?? 0);
+        if (cpc > 0) existing.metrics.averageCpc = cpc;
+      }
+    }
+
+    return [...deduped.values()];
   }
 
   async fetchSearchTerms(customerId: string) {

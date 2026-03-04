@@ -766,7 +766,9 @@ const structureChecks: CheckFn[] = [
       "local", "office", "county", "state", "city",
     ]);
 
+    // Group UNIQUE keywords by ad group — keyword_view returns one row per
     // Group keywords by ad group, collecting texts + track ad group name
+    // (keywords are already deduplicated at the source in fetchKeywords)
     const kwByGroup = new Map<string, { name: string; texts: string[] }>();
     for (const k of activeKeywords) {
       const agId = String(k.adGroup?.id ?? k.campaign?.id ?? "unknown");
