@@ -463,12 +463,74 @@ const wastedSpendChecks: CheckFn[] = [
     const campaigns = d.campaigns ?? [];
     const activeCampaigns = campaigns.filter((c: any) => c.campaign?.status === "ENABLED");
     if (activeCampaigns.length === 0) return { result: "skipped", details: "No active campaigns", recommendation: "" };
-    // Check what % of campaigns have negatives
-    const campaignIds = new Set(negatives.map((n: any) => String(n.campaign?.id)));
-    const coveragePct = safeDiv(campaignIds.size, activeCampaigns.length) * 100;
-    if (coveragePct >= 80) return { result: "pass", details: `Negatives applied to ${coveragePct.toFixed(0)}% of active campaigns`, recommendation: "" };
-    if (coveragePct >= 40) return { result: "warning", details: `Negatives only applied to ${coveragePct.toFixed(0)}% of campaigns`, recommendation: "Apply shared negative keyword lists at account or all-campaign level for consistent filtering" };
-    return { result: "fail", details: `Negatives only cover ${coveragePct.toFixed(0)}% of campaigns`, recommendation: "Apply negative keyword lists to all campaigns to prevent irrelevant spend" };
+
+    // Build set of campaign IDs that have at least one campaign-level negative keyword
+    const coveredIds = new Set(negatives.map((n: any) => String(n.campaign?.id)));
+
+    // Count negatives per covered campaign for detail
+    const negCountByCampaign = new Map<string, number>();
+    for (const n of negatives) {
+      const cid = String(n.campaign?.id);
+      negCountByCampaign.set(cid, (negCountByCampaign.get(cid) ?? 0) + 1);
+    }
+
+    const coveragePct = safeDiv(coveredIds.size, activeCampaigns.length) * 100;
+
+    // Build diagnostic: campaigns WITHOUT negatives
+    const missingCampaigns = activeCampaigns
+      .filter((c: any) => !coveredIds.has(String(c.campaign?.id)))
+      .map((c: any) => {
+        const name = c.campaign?.name ?? "Unknown";
+        const type = (c.campaign?.advertisingChannelType ?? "UNKNOWN").replace(/_/g, " ");
+        const bidding = (c.campaign?.biddingStrategyType ?? "UNKNOWN").replace(/_/g, " ");
+        return `"${name}" — ${type} | ${bidding}`;
+      });
+
+    // Build diagnostic: campaigns WITH negatives (for reference)
+    const coveredCampaigns = activeCampaigns
+      .filter((c: any) => coveredIds.has(String(c.campaign?.id)))
+      .map((c: any) => {
+        const cid = String(c.campaign?.id);
+        const name = c.campaign?.name ?? "Unknown";
+        const count = negCountByCampaign.get(cid) ?? 0;
+        return `"${name}" — ${count} negatives`;
+      });
+
+    const summaryLine = `Negatives cover ${coveredIds.size} of ${activeCampaigns.length} active campaigns (${coveragePct.toFixed(0)}%)`;
+
+    if (coveragePct >= 80) return { result: "pass", details: summaryLine, recommendation: "" };
+
+    // Build detail items
+    const detailItems: string[] = [summaryLine, ""];
+
+    if (missingCampaigns.length > 0) {
+      detailItems.push(`⚠ ${missingCampaigns.length} campaigns WITHOUT negatives:`);
+      // Show up to 25 campaigns, then summarize
+      const shown = missingCampaigns.slice(0, 25);
+      detailItems.push(...shown.map((c: string) => `  • ${c}`));
+      if (missingCampaigns.length > 25) detailItems.push(`  … and ${missingCampaigns.length - 25} more`);
+      detailItems.push("");
+    }
+
+    if (coveredCampaigns.length > 0) {
+      detailItems.push(`✓ ${coveredCampaigns.length} campaigns WITH negatives:`);
+      const shown = coveredCampaigns.slice(0, 10);
+      detailItems.push(...shown.map((c: string) => `  • ${c}`));
+      if (coveredCampaigns.length > 10) detailItems.push(`  … and ${coveredCampaigns.length - 10} more`);
+    }
+
+    const details = detailItems.join("\n");
+
+    if (coveragePct >= 40) return {
+      result: "warning",
+      details,
+      recommendation: "Apply shared negative keyword lists at account level or via Google Ads → Tools → Shared Library → Negative Keyword Lists. Assign each list to all Search and Shopping campaigns for consistent filtering",
+    };
+    return {
+      result: "fail",
+      details,
+      recommendation: "Apply negative keyword lists to all campaigns. Go to Google Ads → Tools & Settings → Shared Library → Negative Keyword Lists. Create themed lists (competitors, irrelevant services, job seekers, free/DIY) and assign them to every Search and Shopping campaign. PMax and Display campaigns don't use keyword negatives but can benefit from brand exclusion lists",
+    };
   }),
 
   // G16 — Wasted spend on irrelevant terms (<5%)
