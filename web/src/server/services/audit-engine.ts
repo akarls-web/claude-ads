@@ -611,16 +611,35 @@ const wastedSpendChecks: CheckFn[] = [
   }),
 
   // G16 — Wasted spend on irrelevant terms (<5%)
+  // Only considers search terms with meaningful spend (>$10) and zero conversions
+  // as potentially wasted. Low-spend terms naturally lack conversion data and
+  // shouldn't inflate the waste metric.
   check("G16", "Wasted Spend", "Wasted spend on irrelevant terms (<5%)", "critical", 15, (d) => {
     const searchTerms = d.searchTerms ?? [];
     if (searchTerms.length === 0) return { result: "skipped", details: "No search term data available" + fetchErrorHint(d, "searchTerms"), recommendation: "" };
     const totalCost = searchTerms.reduce((sum: number, st: any) => sum + microsToValue(st.metrics?.costMicros), 0);
-    const noConvTerms = searchTerms.filter((st: any) => Number(st.metrics?.conversions ?? 0) === 0 && microsToValue(st.metrics?.costMicros) > 0);
-    const wastedCost = noConvTerms.reduce((sum: number, st: any) => sum + microsToValue(st.metrics?.costMicros), 0);
+    if (totalCost === 0) return { result: "skipped", details: "No search term spend", recommendation: "" };
+
+    // Only flag terms with meaningful spend (>$10) and zero conversions
+    const significantTerms = searchTerms.filter((st: any) => microsToValue(st.metrics?.costMicros) > 10);
+    const wastedTerms = significantTerms.filter((st: any) => Number(st.metrics?.conversions ?? 0) === 0);
+    const wastedCost = wastedTerms.reduce((sum: number, st: any) => sum + microsToValue(st.metrics?.costMicros), 0);
     const wastedPct = safeDiv(wastedCost, totalCost) * 100;
-    if (wastedPct < 5) return { result: "pass", details: `${wastedPct.toFixed(1)}% spend on non-converting terms`, recommendation: "" };
-    if (wastedPct < 15) return { result: "warning", details: `${wastedPct.toFixed(1)}% wasted spend on non-converting terms`, recommendation: "Add negative keywords for non-converting search terms to reduce waste" };
-    return { result: "fail", details: `${wastedPct.toFixed(1)}% wasted spend — significant waste detected`, recommendation: "Urgently review search terms — negate irrelevant queries, pause broad match keywords causing waste" };
+
+    if (wastedTerms.length === 0) return { result: "pass", details: "No significant non-converting search terms detected", recommendation: "" };
+
+    // Build detail showing top wasters
+    const sorted = [...wastedTerms].sort((a: any, b: any) => microsToValue(b.metrics?.costMicros) - microsToValue(a.metrics?.costMicros));
+    const topItems = sorted.slice(0, 10).map((st: any) => {
+      const term = st.searchTermView?.searchTerm ?? "Unknown";
+      const cost = microsToValue(st.metrics?.costMicros);
+      const clicks = Number(st.metrics?.clicks ?? 0);
+      return `"${term}" — $${cost.toFixed(2)} spent, ${clicks} clicks, 0 conversions`;
+    });
+
+    if (wastedPct < 5) return { result: "pass", details: `${wastedPct.toFixed(1)}% spend on non-converting terms (${wastedTerms.length} terms over $10 with 0 conversions)`, recommendation: "" };
+    if (wastedPct < 15) return { result: "warning", details: entityDetails([`${wastedPct.toFixed(1)}% potential wasted spend (${wastedTerms.length} terms over $10 with 0 conversions)`, ...topItems]), recommendation: "Review these high-spend non-converting search terms — add as negatives if irrelevant, or optimize landing pages if relevant" };
+    return { result: "fail", details: entityDetails([`${wastedPct.toFixed(1)}% wasted spend — ${wastedTerms.length} terms over $10 with 0 conversions`, ...topItems]), recommendation: "Urgently review search terms — negate irrelevant queries, pause broad match keywords causing waste" };
   }),
 
   // G17 — Broad Match + Manual CPC pairing
