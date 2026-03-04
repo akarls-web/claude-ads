@@ -760,9 +760,14 @@ const structureChecks: CheckFn[] = [
     const keywords = d.keywords ?? [];
     if (keywords.length === 0) return { result: "skipped", details: "No keyword data", recommendation: "" };
 
-    // Only analyze ENABLED keywords — paused/removed are invisible to the user
-    // and don't affect ad serving
-    const activeKeywords = keywords.filter((k: any) => k.adGroupCriterion?.status === "ENABLED");
+    // Only analyze ENABLED keywords in ENABLED ad groups — paused ad groups
+    // and paused keywords are invisible to the user and don't affect ad serving.
+    // The GAQL query includes paused ad groups (status != REMOVED), so we must
+    // filter here.
+    const activeKeywords = keywords.filter((k: any) =>
+      k.adGroupCriterion?.status === "ENABLED" &&
+      k.adGroup?.status === "ENABLED"
+    );
     if (activeKeywords.length === 0) return { result: "skipped", details: "No active keywords", recommendation: "" };
 
     // PPC stop words — common modifiers that don't indicate theme
