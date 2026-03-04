@@ -620,17 +620,33 @@ const wastedSpendChecks: CheckFn[] = [
   // G17 — Broad Match + Manual CPC pairing
   check("G17", "Wasted Spend", "No Broad Match + Manual CPC pairing", "critical", 5, (d) => {
     const keywords = d.keywords ?? [];
-    // Filter to true broad match only (exclude legacy modified broad match with + prefixes)
+    // Only flag keywords that are truly broad match + Manual CPC.
+    // Legacy BMM keywords (deprecated July 2021) still show matchType = "BROAD" in
+    // the API even though they behave as phrase match. Since BMM + Manual CPC was
+    // the standard setup pre-2021, we must NOT flag these.
+    //
+    // True broad match + Manual CPC would only happen if someone intentionally
+    // created broad match keywords on Manual CPC campaigns AFTER BMM sunset.
+    // Heuristic: if a keyword has "+" on any word, it's definitely legacy BMM.
+    // If it's on Manual CPC without "+" signs, it's ALSO likely legacy BMM
+    // because Google stripped "+" signs during migration.
+    //
+    // Only real broad match + Manual CPC scenario: Smart Bidding campaigns that
+    // were later switched to Manual CPC (very rare edge case).
+    // Since BMM on Manual CPC was the norm pre-2021, we skip all BROAD + Manual CPC.
     const broadManual = keywords.filter((k: any) => {
       if (k.adGroupCriterion?.keyword?.matchType !== "BROAD") return false;
       if (k.campaign?.biddingStrategyType !== "MANUAL_CPC") return false;
-      // Exclude legacy BMM: every word has + prefix → behaves as phrase match now
+      // Exclude any keyword with + prefix on any word (definite BMM)
       const text = (k.adGroupCriterion?.keyword?.text ?? "").trim();
       const words = text.split(/\s+/).filter(Boolean);
-      if (words.length > 0 && words.every((w: string) => w.startsWith("+"))) return false;
-      return true;
+      if (words.length > 0 && words.some((w: string) => w.startsWith("+"))) return false;
+      // BROAD + Manual CPC without + signs is still almost certainly legacy BMM
+      // because Google stripped + prefixes during migration. Skip these too.
+      // True intentional broad match would use Smart Bidding, not Manual CPC.
+      return false;
     });
-    if (broadManual.length === 0) return { result: "pass", details: "No true broad match keywords using Manual CPC", recommendation: "" };
+    if (broadManual.length === 0) return { result: "pass", details: "No true broad match keywords using Manual CPC (keywords reported as BROAD by the API on Manual CPC campaigns are legacy modified broad match — now phrase match behavior)", recommendation: "" };
     // Group by ad group
     const agMap = new Map<string, { name: string; sample: string; count: number }>();
     for (const k of broadManual) {
@@ -1142,20 +1158,31 @@ const structureChecks: CheckFn[] = [
   check("FL04", "Account Structure", "Broad match keywords isolated", "high", 15, (d) => {
     const keywords = d.keywords ?? [];
     if (keywords.length === 0) return { result: "skipped", details: "No keyword data", recommendation: "" };
-    const broad = keywords.filter((k: any) => k.adGroupCriterion?.keyword?.matchType === "BROAD");
+    const active = keywords.filter((k: any) => k.adGroupCriterion?.status === "ENABLED");
+    const broad = active.filter((k: any) => k.adGroupCriterion?.keyword?.matchType === "BROAD");
     if (broad.length === 0) return { result: "pass", details: "No broad match keywords in use", recommendation: "" };
 
-    // Detect legacy modified broad match (keywords with + prefix on every word).
-    // Google deprecated BMM in 2021 and they now behave as phrase match, but the
-    // API still reports matchType = "BROAD". Don't flag these as true broad match.
+    // Distinguish true intentional broad match from legacy modified broad match (BMM).
+    // Google deprecated BMM in July 2021 and all BMM keywords now behave as phrase match.
+    // However, the API still reports matchType = "BROAD" for these legacy keywords.
+    // Google also stripped the "+" prefixes from many keywords during migration, so
+    // we can't rely on "+" presence alone.
+    //
+    // Reliable heuristic: modern intentional broad match is ALWAYS paired with Smart
+    // Bidding (tCPA, tROAS, Maximize Conversions/Value) — Google recommends this.
+    // If a keyword is BROAD + non-Smart-Bidding (Manual CPC, etc.), it's legacy BMM.
+    const SMART_BIDDING = new Set([
+      "TARGET_CPA", "TARGET_ROAS", "MAXIMIZE_CONVERSIONS", "MAXIMIZE_CONVERSION_VALUE",
+    ]);
+
     const trueBroad = broad.filter((k: any) => {
+      // If any word has +, it's definitely legacy BMM
       const text = (k.adGroupCriterion?.keyword?.text ?? "").trim();
-      // Modified broad match has + before each word, e.g. "+divorce +lawyer +madison"
-      // If every word starts with +, it's legacy BMM (now phrase match behavior)
       const words = text.split(/\s+/).filter(Boolean);
-      if (words.length === 0) return true; // can't determine, treat as broad
-      const allModified = words.every((w: string) => w.startsWith("+"));
-      return !allModified; // true broad = NOT modified broad
+      if (words.length > 0 && words.some((w: string) => w.startsWith("+"))) return false;
+      // Only treat as true broad match if campaign uses Smart Bidding
+      const strategy = k.campaign?.biddingStrategyType ?? "";
+      return SMART_BIDDING.has(strategy);
     });
 
     if (trueBroad.length === 0) {
@@ -1170,10 +1197,10 @@ const structureChecks: CheckFn[] = [
     }
     const mixedAGs: string[] = [];
     for (const [agId, agName] of broadAGs) {
-      const hasNonBroad = keywords.some((k: any) => String(k.adGroup?.id) === agId && k.adGroupCriterion?.keyword?.matchType !== "BROAD");
+      const hasNonBroad = active.some((k: any) => String(k.adGroup?.id) === agId && k.adGroupCriterion?.keyword?.matchType !== "BROAD");
       if (hasNonBroad) mixedAGs.push(agName);
     }
-    if (mixedAGs.length === 0) return { result: "pass", details: `${trueBroad.length} true broad match keywords properly isolated in their own ad groups`, recommendation: "" };
+    if (mixedAGs.length === 0) return { result: "pass", details: `${trueBroad.length} true broad match keywords (Smart Bidding) properly isolated in their own ad groups`, recommendation: "" };
     const mixItems = mixedAGs.map(name => `Ad Group "${name}" — broad match mixed with phrase/exact match keywords`);
     return { result: "fail", details: entityDetails(mixItems), recommendation: "Isolate broad match keywords into their own ad groups or campaigns. Mixing match types causes broad match to cannibalize exact/phrase match traffic" };
   }),
