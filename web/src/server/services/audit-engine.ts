@@ -469,20 +469,57 @@ const wastedSpendChecks: CheckFn[] = [
   // G14 — Negative keyword lists exist
   check("G14", "Wasted Spend", "Negative keyword lists (≥3 themed)", "critical", 10, (d) => {
     const negatives = d.negativeKeywords ?? [];
-    if (negatives.length >= 30) return { result: "pass", details: `${negatives.length} negative keywords found across campaigns`, recommendation: "" };
-    if (negatives.length >= 10) return { result: "warning", details: `Only ${negatives.length} negative keywords — consider adding more`, recommendation: "Build themed negative keyword lists (competitors, free/cheap, jobs, irrelevant categories)" };
-    return { result: "fail", details: `Only ${negatives.length} negative keywords across all campaigns`, recommendation: "Create at least 3 themed negative keyword lists with 10+ terms each" };
+    const sharedData = d.sharedNegativeLists ?? {};
+    const sharedSets = Array.isArray(sharedData.sharedSets) ? sharedData.sharedSets : (Array.isArray(sharedData) ? [] : []);
+
+    // Count shared list keywords (member_count from each shared set)
+    const sharedListCount = sharedSets.length;
+    const sharedKeywordCount = sharedSets.reduce((sum: number, ss: any) => sum + (ss.sharedSet?.memberCount ?? 0), 0);
+    const campaignLevelCount = negatives.length;
+    const totalNegatives = campaignLevelCount + sharedKeywordCount;
+
+    const detailParts: string[] = [];
+    if (sharedListCount > 0) {
+      detailParts.push(`${sharedListCount} shared negative keyword list(s) with ${sharedKeywordCount} total keywords`);
+      for (const ss of sharedSets.slice(0, 5)) {
+        const name = ss.sharedSet?.name ?? "Unnamed";
+        const count = ss.sharedSet?.memberCount ?? 0;
+        detailParts.push(`  • "${name}" — ${count} keywords`);
+      }
+      if (sharedSets.length > 5) detailParts.push(`  … and ${sharedSets.length - 5} more lists`);
+    }
+    if (campaignLevelCount > 0) {
+      detailParts.push(`${campaignLevelCount} campaign-level negative keywords`);
+    }
+
+    // Pass if enough total negatives OR has proper shared lists
+    if (sharedListCount >= 3 || totalNegatives >= 30) {
+      return { result: "pass", details: detailParts.length > 0 ? detailParts.join("\n") : `${totalNegatives} negative keywords found`, recommendation: "" };
+    }
+    if (sharedListCount >= 1 || totalNegatives >= 10) {
+      return { result: "warning", details: (detailParts.length > 0 ? detailParts.join("\n") + "\n" : "") + `Only ${totalNegatives} total negatives — consider adding more themed lists`, recommendation: "Build themed negative keyword lists (competitors, free/cheap, jobs, irrelevant categories). Use Google Ads → Tools → Shared Library → Negative Keyword Lists for account-wide coverage" };
+    }
+    return { result: "fail", details: `Only ${totalNegatives} negative keywords across all campaigns and shared lists`, recommendation: "Create at least 3 themed negative keyword lists with 10+ terms each in Google Ads → Tools → Shared Library → Negative Keyword Lists" };
   }),
 
   // G15 — Account-level negatives applied
   check("G15", "Wasted Spend", "Account-level negatives applied", "high", 10, (d) => {
     const negatives = d.negativeKeywords ?? [];
     const campaigns = d.campaigns ?? [];
+    const sharedData = d.sharedNegativeLists ?? {};
+    const campaignSharedSets = Array.isArray(sharedData.campaignSharedSets) ? sharedData.campaignSharedSets : [];
+    const sharedSets = Array.isArray(sharedData.sharedSets) ? sharedData.sharedSets : (Array.isArray(sharedData) ? [] : []);
     const activeCampaigns = campaigns.filter((c: any) => c.campaign?.status === "ENABLED");
     if (activeCampaigns.length === 0) return { result: "skipped", details: "No active campaigns", recommendation: "" };
 
-    // Build set of campaign IDs that have at least one campaign-level negative keyword
-    const coveredIds = new Set(negatives.map((n: any) => String(n.campaign?.id)));
+    // Build set of campaign IDs covered by campaign-level negatives
+    const coveredByCampaignLevel = new Set(negatives.map((n: any) => String(n.campaign?.id)));
+
+    // Build set of campaign IDs covered by shared negative keyword lists
+    const coveredBySharedList = new Set(campaignSharedSets.map((cs: any) => String(cs.campaign?.id)));
+
+    // Combined coverage: campaign has negatives from EITHER source
+    const allCovered = new Set([...coveredByCampaignLevel, ...coveredBySharedList]);
 
     // Count negatives per covered campaign for detail
     const negCountByCampaign = new Map<string, number>();
@@ -491,11 +528,20 @@ const wastedSpendChecks: CheckFn[] = [
       negCountByCampaign.set(cid, (negCountByCampaign.get(cid) ?? 0) + 1);
     }
 
-    const coveragePct = safeDiv(coveredIds.size, activeCampaigns.length) * 100;
+    // Count shared lists per campaign
+    const sharedListsByCampaign = new Map<string, string[]>();
+    for (const cs of campaignSharedSets) {
+      const cid = String(cs.campaign?.id);
+      const listName = cs.sharedSet?.name ?? "Unnamed list";
+      if (!sharedListsByCampaign.has(cid)) sharedListsByCampaign.set(cid, []);
+      sharedListsByCampaign.get(cid)!.push(listName);
+    }
 
-    // Build diagnostic: campaigns WITHOUT negatives
+    const coveragePct = safeDiv(allCovered.size, activeCampaigns.length) * 100;
+
+    // Build diagnostic: campaigns WITHOUT any negatives
     const missingCampaigns = activeCampaigns
-      .filter((c: any) => !coveredIds.has(String(c.campaign?.id)))
+      .filter((c: any) => !allCovered.has(String(c.campaign?.id)))
       .map((c: any) => {
         const name = c.campaign?.name ?? "Unknown";
         const type = (c.campaign?.advertisingChannelType ?? "UNKNOWN").replace(/_/g, " ");
@@ -505,24 +551,32 @@ const wastedSpendChecks: CheckFn[] = [
 
     // Build diagnostic: campaigns WITH negatives (for reference)
     const coveredCampaigns = activeCampaigns
-      .filter((c: any) => coveredIds.has(String(c.campaign?.id)))
+      .filter((c: any) => allCovered.has(String(c.campaign?.id)))
       .map((c: any) => {
         const cid = String(c.campaign?.id);
         const name = c.campaign?.name ?? "Unknown";
-        const count = negCountByCampaign.get(cid) ?? 0;
-        return `"${name}" — ${count} negatives`;
+        const parts: string[] = [];
+        const directCount = negCountByCampaign.get(cid) ?? 0;
+        const lists = sharedListsByCampaign.get(cid) ?? [];
+        if (directCount > 0) parts.push(`${directCount} direct`);
+        if (lists.length > 0) parts.push(`${lists.length} shared list(s): ${lists.join(", ")}`);
+        return `"${name}" — ${parts.join(" + ") || "covered"}`;
       });
 
-    const summaryLine = `Negatives cover ${coveredIds.size} of ${activeCampaigns.length} active campaigns (${coveragePct.toFixed(0)}%)`;
+    // Shared list summary
+    const sharedListSummary = sharedSets.length > 0
+      ? `\n📋 ${sharedSets.length} shared negative keyword list(s) found: ${sharedSets.map((ss: any) => `"${ss.sharedSet?.name ?? "Unnamed"}" (${ss.sharedSet?.memberCount ?? 0} kw)`).join(", ")}`
+      : "\n📋 No shared negative keyword lists found";
 
-    if (coveragePct >= 80) return { result: "pass", details: summaryLine, recommendation: "" };
+    const summaryLine = `Negatives cover ${allCovered.size} of ${activeCampaigns.length} active campaigns (${coveragePct.toFixed(0)}%) — ${coveredByCampaignLevel.size} via direct negatives, ${coveredBySharedList.size} via shared lists`;
+
+    if (coveragePct >= 80) return { result: "pass", details: summaryLine + sharedListSummary, recommendation: "" };
 
     // Build detail items
-    const detailItems: string[] = [summaryLine, ""];
+    const detailItems: string[] = [summaryLine, sharedListSummary, ""];
 
     if (missingCampaigns.length > 0) {
-      detailItems.push(`⚠ ${missingCampaigns.length} campaigns WITHOUT negatives:`);
-      // Show up to 25 campaigns, then summarize
+      detailItems.push(`⚠ ${missingCampaigns.length} campaigns WITHOUT negatives (no direct or shared list coverage):`);
       const shown = missingCampaigns.slice(0, 25);
       detailItems.push(...shown.map((c: string) => `  • ${c}`));
       if (missingCampaigns.length > 25) detailItems.push(`  … and ${missingCampaigns.length - 25} more`);
@@ -541,7 +595,7 @@ const wastedSpendChecks: CheckFn[] = [
     if (coveragePct >= 40) return {
       result: "warning",
       details,
-      recommendation: "Apply shared negative keyword lists at account level or via Google Ads → Tools → Shared Library → Negative Keyword Lists. Assign each list to all Search and Shopping campaigns for consistent filtering",
+      recommendation: "Apply shared negative keyword lists to uncovered campaigns. Go to Google Ads → Tools → Shared Library → Negative Keyword Lists → select a list → Apply to campaigns. This ensures consistent filtering without duplicating keywords across campaigns",
     };
     return {
       result: "fail",

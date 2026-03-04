@@ -297,6 +297,39 @@ export class GoogleAdsService {
     `);
   }
 
+  /** Fetch shared negative keyword lists and their campaign assignments */
+  async fetchSharedNegativeLists(customerId: string) {
+    // Get all shared sets of type NEGATIVE_KEYWORDS
+    const sharedSets = await this.query(customerId, `
+      SELECT
+        shared_set.id,
+        shared_set.name,
+        shared_set.type,
+        shared_set.status,
+        shared_set.member_count
+      FROM shared_set
+      WHERE shared_set.type = 'NEGATIVE_KEYWORDS'
+        AND shared_set.status = 'ENABLED'
+    `);
+
+    // Get which campaigns each shared set is applied to
+    const campaignSharedSets = await this.query(customerId, `
+      SELECT
+        shared_set.id,
+        shared_set.name,
+        campaign.id,
+        campaign.name,
+        campaign.status,
+        campaign_shared_set.status
+      FROM campaign_shared_set
+      WHERE shared_set.type = 'NEGATIVE_KEYWORDS'
+        AND campaign_shared_set.status = 'ENABLED'
+        AND campaign.status = 'ENABLED'
+    `);
+
+    return { sharedSets, campaignSharedSets };
+  }
+
   async fetchAssetGroups(customerId: string) {
     try {
       return await this.query(customerId, `
@@ -474,6 +507,7 @@ export class GoogleAdsService {
       userLists,
       assetGroupAssets,
       assetGroupSignals,
+      sharedNegativeLists,
     ] = await Promise.all([
       safe("accountOverview", () => this.fetchAccountOverview(customerId)),
       safe("campaigns", () => this.fetchCampaigns(customerId)),
@@ -492,6 +526,7 @@ export class GoogleAdsService {
       safe("userLists", () => this.fetchUserLists(customerId)),
       safe("assetGroupAssets", () => this.fetchAssetGroupAssets(customerId)),
       safe("assetGroupSignals", () => this.fetchAssetGroupSignals(customerId)),
+      safe("sharedNegativeLists", () => this.fetchSharedNegativeLists(customerId)),
     ]);
 
     // Phase 2: Landing page analysis (depends on ads data for URLs)
@@ -530,6 +565,7 @@ export class GoogleAdsService {
       userLists,
       assetGroupAssets,
       assetGroupSignals,
+      sharedNegativeLists,
       landingPageAnalysis,
       fetchErrors,
       fetchedAt: new Date().toISOString(),

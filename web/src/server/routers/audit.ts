@@ -203,6 +203,7 @@ export const auditRouter = router({
             negativeKeywords: Array.isArray(rawData.negativeKeywords) ? rawData.negativeKeywords.length : 0,
             assetGroups: Array.isArray(rawData.assetGroups) ? rawData.assetGroups.length : 0,
             changeHistory: Array.isArray(rawData.changeHistory) ? rawData.changeHistory.length : 0,
+            sharedNegativeLists: Array.isArray(rawData.sharedNegativeLists) ? 0 : (rawData.sharedNegativeLists?.sharedSets?.length ?? 0),
           },
         };
 
