@@ -81,7 +81,7 @@ type AuditData = Record<string, any>;
 type CheckFn = (data: AuditData) => AuditCheckResult;
 
 /** Format entity-level detail items, capping at `max` with "and N more" */
-function entityDetails(items: string[], max = 3): string {
+function entityDetails(items: string[], max = 10): string {
   if (items.length <= max) return items.join("\n");
   return items.slice(0, max).join("\n") + `\n…and ${items.length - max} more`;
 }

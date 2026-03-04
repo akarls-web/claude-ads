@@ -548,6 +548,28 @@ export default function AuditDetailPage() {
                                   💡 {check.recommendation}
                                 </p>
                               )}
+                            {check.details &&
+                              check.result !== "pass" && (() => {
+                                const lines = check.details.split("\n").filter((l: string) => l.trim());
+                                if (lines.length === 0) return null;
+                                return (
+                                  <div className="mt-2 space-y-1 rounded-md border border-border-light bg-brand-wash/40 px-3 py-2">
+                                    {lines.map((line: string, i: number) => (
+                                      <div
+                                        key={i}
+                                        className="flex items-start gap-2 text-caption text-text-secondary"
+                                      >
+                                        <span className="mt-0.5 shrink-0 text-text-placeholder">
+                                          {line.startsWith("…") ? "" : "›"}
+                                        </span>
+                                        <span className="font-mono text-[11px] leading-relaxed">
+                                          {line}
+                                        </span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                );
+                              })()}
                           </div>
                         </div>
                       ))}
