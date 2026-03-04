@@ -93,6 +93,35 @@ export const auditRouter = router({
       return { audit, checks };
     }),
 
+  // Get raw Google Ads API payload for a completed audit (saved to disk)
+  getRawData: protectedProcedure
+    .input(z.object({ auditId: z.string().uuid() }))
+    .query(async ({ input, ctx }) => {
+      // Verify the audit belongs to this user
+      const [audit] = await db
+        .select({ id: audits.id })
+        .from(audits)
+        .where(
+          and(eq(audits.id, input.auditId), eq(audits.userId, ctx.userId))
+        );
+      if (!audit) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Audit not found" });
+      }
+
+      try {
+        const fs = await import("fs/promises");
+        const path = await import("path");
+        const filePath = path.join(process.cwd(), ".audit-data", `${input.auditId}.json`);
+        const content = await fs.readFile(filePath, "utf-8");
+        return JSON.parse(content);
+      } catch {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Raw data not available for this audit. Only audits run after this feature was added have raw data saved.",
+        });
+      }
+    }),
+
   run: protectedProcedure
     .input(
       z.object({
@@ -206,6 +235,19 @@ export const auditRouter = router({
             sharedNegativeLists: Array.isArray(rawData.sharedNegativeLists) ? 0 : (rawData.sharedNegativeLists?.sharedSets?.length ?? 0),
           },
         };
+
+        // Save full raw data payload to disk for debugging/inspection
+        try {
+          const fs = await import("fs/promises");
+          const path = await import("path");
+          const dataDir = path.join(process.cwd(), ".audit-data");
+          await fs.mkdir(dataDir, { recursive: true });
+          const filePath = path.join(dataDir, `${audit.id}.json`);
+          await fs.writeFile(filePath, JSON.stringify(rawData, null, 2));
+          console.log(`[audit.run] Raw data saved to ${filePath}`);
+        } catch (fsErr) {
+          console.error("[audit.run] Failed to save raw data to disk:", fsErr);
+        }
 
         // Run AI-powered narrative analysis (Claude)
         const aiAnalysis = await generateAIAnalysis({

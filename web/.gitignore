@@ -17,3 +17,6 @@ build/
 # misc
 .DS_Store
 *.tsbuildinfo
+
+# raw audit data dumps (can be large)
+.audit-data/
