@@ -780,8 +780,10 @@ const structureChecks: CheckFn[] = [
       "local", "office", "county", "state", "city",
     ]);
 
-    // Group UNIQUE keywords by ad group, collecting texts + track ad group name
-    // (keywords are already deduplicated at the source in fetchKeywords)
+    // Group UNIQUE keywords by ad group, collecting DISTINCT texts.
+    // keyword_view returns one row per match type — "support" as BROAD +
+    // PHRASE = 2 rows. Deduplicate by text so the theme/count analysis
+    // is based on unique keyword meanings, not match-type permutations.
     const kwByGroup = new Map<string, { name: string; texts: string[] }>();
     for (const k of activeKeywords) {
       const agId = String(k.adGroup?.id ?? k.campaign?.id ?? "unknown");
@@ -789,7 +791,8 @@ const structureChecks: CheckFn[] = [
       const text = (k.adGroupCriterion?.keyword?.text ?? "").toLowerCase().trim();
       if (!text) continue;
       if (!kwByGroup.has(agId)) kwByGroup.set(agId, { name: agName, texts: [] });
-      kwByGroup.get(agId)!.texts.push(text);
+      const existing = kwByGroup.get(agId)!;
+      if (!existing.texts.includes(text)) existing.texts.push(text);
     }
 
     const total = kwByGroup.size;
@@ -803,26 +806,31 @@ const structureChecks: CheckFn[] = [
       // Size check
       if (group.texts.length > 15) itemIssues.push(`${group.texts.length} keywords (exceeds 15 max)`);
 
-      // Semantic coherence: tokenize, strip stop words, find dominant theme
-      if (group.texts.length >= 3) {
-        const tokenFreq = new Map<string, number>();
-        for (const text of group.texts) {
-          const tokens = text.replace(/[^a-z0-9\s]/g, "").split(/\s+/).filter((t) => t.length >= 3 && !stopWords.has(t));
-          const unique = new Set(tokens);
-          for (const t of unique) {
-            tokenFreq.set(t, (tokenFreq.get(t) ?? 0) + 1);
-          }
+      // Semantic coherence: tokenize, strip stop words, find dominant theme.
+      // Only consider keywords that contribute meaningful tokens —
+      // pure stop-word keywords like "attorney" or "lawyers" carry no theme
+      // signal and shouldn't dilute the coherence denominator.
+      const themeKeywords: string[] = [];
+      const tokenFreq = new Map<string, number>();
+
+      for (const text of group.texts) {
+        const tokens = text.replace(/[^a-z0-9\s]/g, "").split(/\s+/).filter((t) => t.length >= 3 && !stopWords.has(t));
+        if (tokens.length === 0) continue; // skip pure stop-word keywords
+        themeKeywords.push(text);
+        const unique = new Set(tokens);
+        for (const t of unique) {
+          tokenFreq.set(t, (tokenFreq.get(t) ?? 0) + 1);
         }
+      }
 
-        if (tokenFreq.size > 0) {
-          const sorted = [...tokenFreq.entries()].sort((a, b) => b[1] - a[1]);
-          const topThemeCount = sorted[0][1];
-          const coherence = topThemeCount / group.texts.length;
+      if (themeKeywords.length >= 3 && tokenFreq.size > 0) {
+        const sorted = [...tokenFreq.entries()].sort((a, b) => b[1] - a[1]);
+        const topThemeCount = sorted[0][1];
+        const coherence = topThemeCount / themeKeywords.length;
 
-          if (coherence < 0.5) {
-            const topThemes = sorted.slice(0, 3).map(([w]) => w);
-            itemIssues.push(`mixed themes (${(coherence * 100).toFixed(0)}% coherence): ${topThemes.join(", ")}`);
-          }
+        if (coherence < 0.5) {
+          const topThemes = sorted.slice(0, 3).map(([w]) => w);
+          itemIssues.push(`mixed themes (${(coherence * 100).toFixed(0)}% coherence): ${topThemes.join(", ")}`);
         }
       }
 
@@ -831,13 +839,13 @@ const structureChecks: CheckFn[] = [
         const kwSample = group.texts.length <= 10
           ? group.texts.map(t => `"${t}"`).join(", ")
           : group.texts.slice(0, 10).map(t => `"${t}"`).join(", ") + ` …+${group.texts.length - 10} more`;
-        issueItems.push(`keywords: ${kwSample}`);
-        issueItems.push(`Ad Group "${group.name}" (${group.texts.length} active kw) — ${itemIssues.join("; ")}`);
+        issueItems.push(`keywords: ${kwSample} | Ad Group "${group.name}" (${group.texts.length} active kw) — ${itemIssues.join("; ")}`);
       }
     }
 
     if (issueItems.length === 0) return { result: "pass", details: `All ${total} ad groups have focused keyword themes (≤15 keywords, coherent topics)`, recommendation: "" };
 
+    // issueItems has ONE entry per flagged ad group
     const problemPct = safeDiv(issueItems.length, total) * 100;
 
     if (problemPct < 25) return { result: "warning", details: entityDetails(issueItems), recommendation: "Split multi-theme ad groups into tighter single-topic groups (5-10 keywords each). Each practice area (Divorce, Custody, Support) should have its own ad group" };
