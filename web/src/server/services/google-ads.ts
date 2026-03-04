@@ -234,14 +234,19 @@ export class GoogleAdsService {
         metrics.conversions
       FROM search_term_view
       WHERE segments.date DURING LAST_30_DAYS
-      LIMIT 2000
+      ORDER BY metrics.cost_micros DESC
+      LIMIT 5000
     `);
-    // Return top 500 by cost
-    return rows
-      .sort((a: GoogleAdsRow, b: GoogleAdsRow) =>
-        Number(b.metrics?.costMicros ?? 0) - Number(a.metrics?.costMicros ?? 0)
-      )
-      .slice(0, 500);
+    // Compute total visible spend from ALL returned rows before truncation
+    const totalVisibleSpendMicros = rows.reduce(
+      (sum: number, r: GoogleAdsRow) => sum + Number(r.metrics?.costMicros ?? 0), 0
+    );
+    // Return top 500 by cost for detailed analysis
+    const top500 = rows.slice(0, 500);
+    // Attach metadata for G19 visibility check
+    (top500 as any)._totalVisibleSpendMicros = totalVisibleSpendMicros;
+    (top500 as any)._totalRowsFetched = rows.length;
+    return top500;
   }
 
   async fetchAds(customerId: string) {

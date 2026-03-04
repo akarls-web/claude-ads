@@ -200,7 +200,7 @@ const conversionChecks: CheckFn[] = [
       return { result: "pass", details: `${primary.length} primary, ${secondary.length} secondary actions — properly separated`, recommendation: "" };
     }
     if (primary.length === 0) return { result: "fail", details: issues.join(". "), recommendation: "Designate your main revenue/lead actions as primary; mark micro-conversions as secondary" };
-    return { result: "warning", details: issues.join(". "), recommendation: "Mark supporting actions (page views, scroll depth, AddToCart) as secondary to avoid bid signal pollution. For lead gen, ensure count is set to 'One' not 'Every'" };
+    return { result: "warning", details: issues.join(". "), recommendation: "Move page views, scroll depth, AddToCart to secondary to prevent bid signal pollution" };
   }),
 
   // G48 — Attribution model
@@ -283,7 +283,7 @@ const conversionChecks: CheckFn[] = [
     return {
       result: "fail",
       details: entityDetails(dupeItems),
-      recommendation: "Remove or consolidate duplicate conversion actions to prevent double-counting. Compare the IDs above in Google Ads → Goals → Conversions → Summary. Keep the one actively receiving data and remove/set the other to Secondary",
+      recommendation: "Consolidate duplicate conversion actions — keep the one receiving data, demote the other to Secondary",
     };
   }),
 
@@ -346,7 +346,7 @@ const conversionChecks: CheckFn[] = [
       return cat === "PHONE_CALL" || type === "UPLOAD_CALLS" || /call|phone|callrail|ctm|calltrack/i.test(name);
     });
     if (callConvs.length > 0) return { result: "pass", details: `Call tracking detected: ${callConvs.length} call conversion actions`, recommendation: "" };
-    return { result: "fail", details: "No call tracking integration detected (CallRail, CTM, or Google forwarding)", recommendation: "Implement call tracking via CallRail or CallTrackingMetrics. Connect integration to Google Ads so call conversions feed into bidding" };
+    return { result: "fail", details: "No call tracking integration detected (CallRail, CTM, or Google forwarding)", recommendation: "Implement call tracking (CallRail/CTM) and connect to Google Ads for bidding signals" };
   }),
 
   // CT-FL3 — Calls from Ads conversion action active
@@ -361,7 +361,7 @@ const conversionChecks: CheckFn[] = [
       if (isPrimary) return { result: "pass", details: "Calls from Ads conversion action is active and primary", recommendation: "" };
       return { result: "warning", details: "Calls from Ads exists but is not marked as primary", recommendation: "Mark Calls from Ads as a primary conversion action so it feeds into Smart Bidding optimization" };
     }
-    return { result: "fail", details: "No Calls from Ads conversion action detected", recommendation: "Enable call extensions with a 'Calls from ads' conversion action. This captures phone calls directly from ad click-to-call" };
+    return { result: "fail", details: "No Calls from Ads conversion action detected", recommendation: "Enable call extensions with a 'Calls from Ads' conversion action" };
   }),
 
   // CT-FL4 — Offline conversion funnel staged (Qualified → Consultation → Closed)
@@ -370,7 +370,7 @@ const conversionChecks: CheckFn[] = [
     const offlineNames = convs
       .filter((c: any) => c.conversionAction?.type === "UPLOAD_CLICKS" || c.conversionAction?.type === "UPLOAD_CALLS" || c.conversionAction?.type === "STORE_SALES")
       .map((c: any) => (c.conversionAction?.name ?? "").toLowerCase());
-    if (offlineNames.length === 0) return { result: "warning", details: "No offline conversions set up — cannot track lead quality past initial inquiry", recommendation: "Set up offline conversion import (CRM, Zapier, or manual upload) with staged events: Qualified Lead → Consultation → Closed/Funded" };
+    if (offlineNames.length === 0) return { result: "warning", details: "No offline conversions set up — cannot track lead quality past initial inquiry", recommendation: "Set up offline conversion import with staged events: Qualified → Consultation → Closed" };
     const stages = {
       qualified: offlineNames.some((n: string) => /qualified|mql|sql|vetted/.test(n)),
       consultation: offlineNames.some((n: string) => /consult|appointment|meeting|booked/.test(n)),
@@ -378,7 +378,7 @@ const conversionChecks: CheckFn[] = [
     };
     const stageCount = Object.values(stages).filter(Boolean).length;
     if (stageCount >= 2) return { result: "pass", details: `Offline funnel has ${stageCount}/3 stages: ${Object.entries(stages).filter(([,v]) => v).map(([k]) => k).join(", ")}`, recommendation: "" };
-    if (stageCount === 1) return { result: "warning", details: `Only 1 offline funnel stage detected. Missing: ${Object.entries(stages).filter(([,v]) => !v).map(([k]) => k).join(", ")}`, recommendation: "Add additional funnel stages (Qualified Lead = $500, Consultation = $1,000, Closed/Funded = actual value) for accurate value-based bidding" };
+    if (stageCount === 1) return { result: "warning", details: `Only 1 offline funnel stage detected. Missing: ${Object.entries(stages).filter(([,v]) => !v).map(([k]) => k).join(", ")}`, recommendation: "Add funnel stages with values: Qualified ($500) → Consultation ($1K) → Closed (actual value)" };
     return { result: "warning", details: "Offline conversions exist but no recognizable funnel stages (qualified, consultation, closed)", recommendation: "Rename offline conversion actions to reflect funnel stages and assign values for value-based bidding optimization" };
   }),
 
@@ -399,7 +399,7 @@ const conversionChecks: CheckFn[] = [
     const manyPerClick = nonSmart.filter((c: any) => c.conversionAction?.countingType === "MANY_PER_CLICK");
     if (manyPerClick.length === 0) return { result: "pass", details: `All ${nonSmart.length} primary conversions set to 'One per click'`, recommendation: "" };
     const countItems = manyPerClick.map((c: any) => `Conversion Action "${c.conversionAction?.name ?? 'Unknown'}" — count set to 'Every' (should be 'One')`);
-    return { result: "fail", details: entityDetails(countItems), recommendation: "Switch all lead gen conversions to 'Count: One'. 'Every' counts repeat form fills/calls from the same person, inflating numbers and misleading Smart Bidding" };
+    return { result: "fail", details: entityDetails(countItems), recommendation: "Switch all lead gen conversions to 'Count: One' — 'Every' inflates from repeat submissions" };
   }),
 
   // CT-FL6 — Low-value actions not marked as Primary
@@ -412,7 +412,7 @@ const conversionChecks: CheckFn[] = [
     });
     if (lowValue.length === 0) return { result: "pass", details: "No low-value micro-conversions marked as primary", recommendation: "" };
     const lvItems = lowValue.map((c: any) => `Conversion Action "${c.conversionAction?.name ?? 'Unknown'}" — low-value action marked as Primary`);
-    return { result: "fail", details: entityDetails(lvItems), recommendation: "Move low-value actions (page scrolls, button clicks, newsletter signups) to secondary. They inflate conversion counts and mislead Smart Bidding" };
+    return { result: "fail", details: entityDetails(lvItems), recommendation: "Move page scrolls, button clicks, newsletter signups to secondary — they inflate conversion counts" };
   }),
 
   // CT-FL7 — Custom Goal includes required primary actions
@@ -420,7 +420,7 @@ const conversionChecks: CheckFn[] = [
     const convs = d.conversions ?? [];
     if (convs.length === 0) return { result: "skipped", details: "No conversions", recommendation: "" };
     // Custom Goals cannot be queried via API — flag for manual review
-    return { result: "manual", details: "Custom Goal configuration requires manual review", recommendation: "If campaigns use Custom Goals, verify they include all 3 required primary actions: Form Fill, Website Calls (via tracking), and Calls from Ads. Custom Goals should NOT include low-value actions" };
+    return { result: "manual", details: "Custom Goal configuration requires manual review", recommendation: "Verify Custom Goals include Form Fill + Website Calls + Calls from Ads. Exclude low-value actions" };
   }),
 
   // CT-FL8 — Auto-tagging enabled
@@ -429,7 +429,7 @@ const conversionChecks: CheckFn[] = [
     if (!account) return { result: "skipped", details: "No account data", recommendation: "" };
     const autoTag = account.customer?.autoTaggingEnabled;
     if (autoTag === true) return { result: "pass", details: "Auto-tagging is enabled", recommendation: "" };
-    if (autoTag === false) return { result: "fail", details: "Auto-tagging is disabled — conversion tracking and Analytics linking will not work properly", recommendation: "Enable auto-tagging immediately. It's required for Google Ads conversion tracking, GA4 integration, and accurate campaign attribution" };
+    if (autoTag === false) return { result: "fail", details: "Auto-tagging is disabled — conversion tracking and Analytics linking will not work properly", recommendation: "Enable auto-tagging — required for conversion tracking, GA4 integration, and attribution" };
     return { result: "warning", details: "Auto-tagging status could not be determined", recommendation: "Verify auto-tagging is enabled under Account Settings → Auto-tagging" };
   }),
 
@@ -455,7 +455,7 @@ const conversionChecks: CheckFn[] = [
     const totalOnlineConvs = campaigns.reduce((sum: number, c: any) => sum + Number(c.metrics?.conversions ?? 0), 0);
     if (totalOnlineConvs === 0) return { result: "skipped", details: "No online conversion data to compare", recommendation: "" };
     // Cannot get offline conversion counts directly from this query — flag for manual review
-    return { result: "manual", details: `Total account conversions: ${totalOnlineConvs.toFixed(0)} — verify offline volume is proportional`, recommendation: "Compare offline conversion volume to total leads. If Google Ads shows 40 leads but offline tracking shows only 5 qualified leads, investigate data flow issues (CRM sync, Zapier triggers, manual upload cadence)" };
+    return { result: "manual", details: `Total account conversions: ${totalOnlineConvs.toFixed(0)} — verify offline volume is proportional`, recommendation: "Verify offline conversion volume is proportional to total leads — investigate CRM sync gaps if divergent" };
   }),
 ];
 
@@ -503,7 +503,7 @@ const wastedSpendChecks: CheckFn[] = [
       return { result: "pass", details: detailParts.length > 0 ? detailParts.join("\n") : `${totalNegatives} negative keywords found`, recommendation: "" };
     }
     if (sharedListCount >= 1 || totalNegatives >= 10) {
-      return { result: "warning", details: (detailParts.length > 0 ? detailParts.join("\n") + "\n" : "") + `Only ${totalNegatives} total negatives — consider adding more themed lists`, recommendation: "Build themed negative keyword lists (competitors, free/cheap, jobs, irrelevant categories). Use Google Ads → Tools → Shared Library → Negative Keyword Lists for account-wide coverage" };
+      return { result: "warning", details: (detailParts.length > 0 ? detailParts.join("\n") + "\n" : "") + `Only ${totalNegatives} total negatives — consider adding more themed lists`, recommendation: "Build themed negative lists (competitors, free/cheap, jobs) via Shared Library → Negative Keyword Lists" };
     }
     return { result: "fail", details: `Only ${totalNegatives} negative keywords across all campaigns and shared lists`, recommendation: "Create at least 3 themed negative keyword lists with 10+ terms each in Google Ads → Tools → Shared Library → Negative Keyword Lists" };
   }),
@@ -601,12 +601,12 @@ const wastedSpendChecks: CheckFn[] = [
     if (coveragePct >= 40) return {
       result: "warning",
       details,
-      recommendation: "Apply shared negative keyword lists to uncovered campaigns. Go to Google Ads → Tools → Shared Library → Negative Keyword Lists → select a list → Apply to campaigns. This ensures consistent filtering without duplicating keywords across campaigns",
+      recommendation: "Apply shared negative keyword lists to uncovered campaigns via Shared Library → Negative Keyword Lists",
     };
     return {
       result: "fail",
       details,
-      recommendation: "Apply negative keyword lists to all campaigns. Go to Google Ads → Tools & Settings → Shared Library → Negative Keyword Lists. Create themed lists (competitors, irrelevant services, job seekers, free/DIY) and assign them to every Search and Shopping campaign. PMax and Display campaigns don't use keyword negatives but can benefit from brand exclusion lists",
+      recommendation: "Create themed negative lists (competitors, irrelevant services, job seekers) and assign to all Search/Shopping campaigns via Shared Library",
     };
   }),
 
@@ -701,12 +701,18 @@ const wastedSpendChecks: CheckFn[] = [
     if (searchTerms.length === 0) return { result: "skipped", details: "No search term data" + fetchErrorHint(d, "searchTerms"), recommendation: "" };
     const searchCampaigns = campaigns.filter((c: any) => c.campaign?.advertisingChannelType === "SEARCH");
     const totalSpend = searchCampaigns.reduce((sum: number, c: any) => sum + microsToValue(c.metrics?.costMicros), 0);
-    const visibleSpend = searchTerms.reduce((sum: number, st: any) => sum + microsToValue(st.metrics?.costMicros), 0);
-    const visPct = safeDiv(visibleSpend, totalSpend) * 100;
     if (totalSpend === 0) return { result: "skipped", details: "No search campaign spend", recommendation: "" };
+
+    // Use pre-computed total from ALL fetched rows (before top-500 truncation)
+    const totalVisibleMicros = (searchTerms as any)._totalVisibleSpendMicros;
+    const visibleSpend = totalVisibleMicros != null
+      ? totalVisibleMicros / 1_000_000
+      : searchTerms.reduce((sum: number, st: any) => sum + microsToValue(st.metrics?.costMicros), 0);
+    const visPct = safeDiv(visibleSpend, totalSpend) * 100;
+
     if (visPct > 60) return { result: "pass", details: `${visPct.toFixed(0)}% of search spend has visible search terms`, recommendation: "" };
-    if (visPct > 40) return { result: "warning", details: `Only ${visPct.toFixed(0)}% of search term spend is visible`, recommendation: "High hidden search term ratio — may indicate broad match or Dynamic Search Ads. Review and add negatives" };
-    return { result: "fail", details: `Only ${visPct.toFixed(0)}% of search term spend is visible — too opaque`, recommendation: "Reduce use of broad match; enable search term reports and review hidden spend regularly" };
+    if (visPct > 40) return { result: "warning", details: `${visPct.toFixed(0)}% search term visibility — review broad match usage`, recommendation: "High hidden search term ratio — review broad match and Dynamic Search Ads" };
+    return { result: "fail", details: `${visPct.toFixed(0)}% search term visibility — too opaque`, recommendation: "Reduce broad match usage; review hidden spend regularly" };
   }),
 
   // G-WS1 — Zero-conversion keywords with significant spend
@@ -874,8 +880,8 @@ const structureChecks: CheckFn[] = [
     // issueItems has ONE entry per flagged ad group
     const problemPct = safeDiv(issueItems.length, total) * 100;
 
-    if (problemPct < 25) return { result: "warning", details: entityDetails(issueItems), recommendation: "Split multi-theme ad groups into tighter single-topic groups (5-10 keywords each). Each practice area (Divorce, Custody, Support) should have its own ad group" };
-    return { result: "fail", details: entityDetails(issueItems), recommendation: "Restructure ad groups into single-theme groups with ≤15 keywords. Group keywords by core topic — e.g., 'divorce', 'child custody', 'child support' should be separate ad groups for better ad relevance and Quality Score" };
+    if (problemPct < 25) return { result: "warning", details: entityDetails(issueItems), recommendation: "Split multi-theme ad groups into single-topic groups (5-10 keywords each)" };
+    return { result: "fail", details: entityDetails(issueItems), recommendation: "Restructure into single-theme ad groups (≤15 keywords). Separate by core topic: divorce, custody, support" };
   }),
 
   // G04 — Campaign count per objective (≤5 per funnel stage, grouped by location)
@@ -1013,7 +1019,7 @@ const structureChecks: CheckFn[] = [
     const practiceAreas = ["divorce", "custody", "child custody", "child support", "family law", "alimony", "spousal support", "adoption", "paternity", "dui", "criminal"];
     const found = practiceAreas.filter((pa) => names.some((n: string) => n.includes(pa)));
     if (found.length >= 2) return { result: "pass", details: `Campaigns segmented by practice area: ${found.join(", ")}`, recommendation: "" };
-    if (found.length === 1) return { result: "warning", details: `Only 1 practice area detected in campaign names: ${found[0]}`, recommendation: "Segment campaigns by practice area — e.g., separate Divorce, Child Custody, and Family Law into individual campaigns for better budget control and ad relevance" };
+    if (found.length === 1) return { result: "warning", details: `Only 1 practice area detected in campaign names: ${found[0]}`, recommendation: "Segment into separate campaigns per practice area (Divorce, Child Custody, Family Law)" };
     return { result: "fail", details: "No practice area segmentation detected — keywords may be mixed across campaigns", recommendation: "Create dedicated campaigns per practice area (Divorce, Child Custody, Child Support, Family Law) for targeted ad copy and budget allocation" };
   }),
 
@@ -1186,8 +1192,8 @@ const structureChecks: CheckFn[] = [
     }
     if (mixedGroups.length === 0) return { result: "pass", details: "No ad groups mixing research and buyer intent keywords", recommendation: "" };
     const mixedItems = mixedGroups.map(g => `Ad Group "${g.name}" — mixes research ("${g.researchSample}") with buyer intent ("${g.buyerSample}")`);
-    if (mixedGroups.length <= 2) return { result: "warning", details: entityDetails(mixedItems), recommendation: "Separate research-intent keywords (how to file, custody laws, divorce process) from buyer-intent keywords (divorce attorney, hire lawyer) into different ad groups for better ad relevance" };
-    return { result: "fail", details: entityDetails(mixedItems), recommendation: "Restructure immediately: research keywords (how to, what is, rights, laws) should be in separate ad groups from buyer keywords (attorney, lawyer, hire, best). This directly impacts Quality Score and conversion rates" };
+    if (mixedGroups.length <= 2) return { result: "warning", details: entityDetails(mixedItems), recommendation: "Separate research-intent keywords from buyer-intent keywords into different ad groups" };
+    return { result: "fail", details: entityDetails(mixedItems), recommendation: "Separate research keywords (how to, what is, laws) from buyer keywords (attorney, lawyer, hire) into different ad groups" };
   }),
 
   // FL04 — Broad match keyword isolation
@@ -1235,7 +1241,7 @@ const structureChecks: CheckFn[] = [
     }
     if (mixedAGs.length === 0) return { result: "pass", details: `${trueBroad.length} active broad match keywords properly isolated in their own ad groups`, recommendation: "" };
     const mixItems = mixedAGs.map(name => `Ad Group "${name}" — broad match mixed with phrase/exact match keywords`);
-    return { result: "fail", details: entityDetails(mixItems), recommendation: "Isolate broad match keywords into their own ad groups or campaigns. Mixing match types causes broad match to cannibalize exact/phrase match traffic" };
+    return { result: "fail", details: entityDetails(mixItems), recommendation: "Isolate broad match keywords into their own ad groups — mixing match types causes cannibalization" };
   }),
 ];
 
@@ -1575,9 +1581,9 @@ const adsChecks: CheckFn[] = [
     const avgCTR = safeDiv(totalClicks, totalImps) * 100;
     // Legal industry average CTR for search is ~5-7% (higher than cross-industry 3-5%)
     if (avgCTR >= 7) return { result: "pass", details: `Account CTR: ${avgCTR.toFixed(2)}% — above legal industry average (5-7%)`, recommendation: "" };
-    if (avgCTR >= 5) return { result: "warning", details: `Account CTR: ${avgCTR.toFixed(2)}% — at legal industry average`, recommendation: "Legal industry benchmark is 5-7% CTR. Improve headlines with practice area keywords, add extensions, and use emotional triggers relevant to family law" };
-    if (avgCTR >= 3) return { result: "warning", details: `Account CTR: ${avgCTR.toFixed(2)}% — below legal industry average (5-7%)`, recommendation: "CTR is below the legal industry benchmark. Use practice-area-specific headlines (e.g., 'Protect Your Custody Rights'), add all extensions, and ensure ad-to-keyword alignment" };
-    return { result: "fail", details: `Account CTR: ${avgCTR.toFixed(2)}% — significantly below legal industry average (5-7%)`, recommendation: "Critically low CTR for legal. Rewrite RSA headlines with practice area terms, add sitelinks/callouts/structured snippets, and tighten ad group themes around specific practice areas" };
+    if (avgCTR >= 5) return { result: "warning", details: `Account CTR: ${avgCTR.toFixed(2)}% — at legal industry average`, recommendation: "Improve headlines with practice area keywords, add extensions, and test emotional triggers" };
+    if (avgCTR >= 3) return { result: "warning", details: `Account CTR: ${avgCTR.toFixed(2)}% — below legal industry average (5-7%)`, recommendation: "Use practice-area-specific headlines, add all extensions, and tighten keyword-to-ad alignment" };
+    return { result: "fail", details: `Account CTR: ${avgCTR.toFixed(2)}% — significantly below legal industry average (5-7%)`, recommendation: "Rewrite RSA headlines with practice area terms, add all extensions, and tighten ad group themes" };
   }),
 
   // G-PM1 — PMax audience signals configured (now automated via API)
@@ -1940,7 +1946,7 @@ const settingsChecks: CheckFn[] = [
     if (autoApplied.length === 0) return { result: "pass", details: "No auto-applied recommendation changes detected in last 14 days", recommendation: "" };
     const aaTypes = [...new Set(autoApplied.map((ch: any) => ch.changeEvent?.changeResourceType ?? "Unknown"))];
     const aaItems = aaTypes.map(t => `Auto-Applied Change — ${t} modification (${autoApplied.filter((ch: any) => (ch.changeEvent?.changeResourceType ?? "Unknown") === t).length} changes)`);
-    return { result: "fail", details: entityDetails(aaItems), recommendation: "Disable ALL Auto-Apply Recommendations immediately. Google's auto-apply can add broad keywords, change bids, and modify budgets without your consent. Review all recent auto-applied changes and revert where needed" };
+    return { result: "fail", details: entityDetails(aaItems), recommendation: "Disable ALL Auto-Apply Recommendations — Google may add keywords, change bids, and modify budgets without consent" };
   }),
 
   // ST02 — Disapproved ads flagged
@@ -1999,7 +2005,7 @@ const settingsChecks: CheckFn[] = [
     const avgCPL = safeDiv(totalCost, totalConv);
     if (avgCPL === 0) return { result: "skipped", details: "Cannot calculate CPL", recommendation: "" };
     // Cannot get device-level breakdown from campaign-level query — flag for manual review with the account average
-    return { result: "manual", details: `Account avg CPL: $${avgCPL.toFixed(2)} — verify no device exceeds $${(avgCPL * 1.3).toFixed(2)} (30% above avg)`, recommendation: "Check device performance in the UI. If any device (mobile, desktop, tablet) has CPL more than 30% above the account average, apply a negative bid adjustment. Mobile typically has higher CPL for family law" };
+    return { result: "manual", details: `Account avg CPL: $${avgCPL.toFixed(2)} — verify no device exceeds $${(avgCPL * 1.3).toFixed(2)} (30% above avg)`, recommendation: "If any device CPL exceeds 30% above account average, apply a negative bid adjustment" };
   }),
 
   // ST06 — Shared budgets flagged
@@ -2022,7 +2028,7 @@ const settingsChecks: CheckFn[] = [
       const extra = campsOnBudget.length > 3 ? ` and ${campsOnBudget.length - 3} more` : "";
       sharedItems.push(`Shared Budget — ${count} campaigns: ${names}${extra}`);
     }
-    return { result: "warning", details: entityDetails(sharedItems), recommendation: "Remove shared budgets and assign individual budgets to each campaign. Shared budgets let Google shift spend unpredictably between campaigns, often favoring lower-value traffic" };
+    return { result: "warning", details: entityDetails(sharedItems), recommendation: "Remove shared budgets — assign individual budgets per campaign to prevent unpredictable spend shifts" };
   }),
 
   // ST07 — Sitelink count and quality (now automated via API)
@@ -2195,7 +2201,7 @@ export function runAudit(data: AuditData): AuditReport {
       description: "All API data sources accessible",
       result: "warning",
       severity: "high",
-      details: `${errorItems.length} data source(s) failed to load:\n${errorItems.join("\n")}\n\nChecks depending on this data were skipped. This may be caused by API permissions, account access level, or temporary errors. Re-running the audit may resolve transient issues.`,
+      details: `${errorItems.length} data source(s) failed to load:\n${errorItems.join("\n")}\nDependent checks were skipped — re-run to resolve transient errors`,
       recommendation: "Verify the Google Ads API connection has full read access. If using an MCC, ensure the child account is linked. For search_term_view access, the API token needs Standard access level (not Basic).",
       isQuickWin: false,
       estimatedFixMinutes: 15,
