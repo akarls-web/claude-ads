@@ -217,24 +217,32 @@ export class GoogleAdsService {
   }
 
   async fetchSearchTerms(customerId: string) {
-    return this.query(customerId, `
+    // Note: search_term_view.status was removed/deprecated in API v20.
+    // campaign.status filtering and cost sorting done in code to avoid
+    // GAQL INVALID_ARGUMENT errors with this resource.
+    const rows = await this.query(customerId, `
       SELECT
         search_term_view.search_term,
-        search_term_view.status,
         ad_group.id,
         ad_group.name,
         campaign.id,
         campaign.name,
+        campaign.status,
         metrics.impressions,
         metrics.clicks,
         metrics.cost_micros,
         metrics.conversions
       FROM search_term_view
-      WHERE campaign.status = 'ENABLED'
-        AND segments.date DURING LAST_90_DAYS
-      ORDER BY metrics.cost_micros DESC
-      LIMIT 500
+      WHERE segments.date DURING LAST_90_DAYS
+      LIMIT 2000
     `);
+    // Filter to enabled campaigns and return top 500 by cost
+    return rows
+      .filter((r: GoogleAdsRow) => r.campaign?.status === "ENABLED")
+      .sort((a: GoogleAdsRow, b: GoogleAdsRow) =>
+        Number(b.metrics?.costMicros ?? 0) - Number(a.metrics?.costMicros ?? 0)
+      )
+      .slice(0, 500);
   }
 
   async fetchAds(customerId: string) {
