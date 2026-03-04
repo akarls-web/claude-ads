@@ -217,18 +217,17 @@ export class GoogleAdsService {
   }
 
   async fetchSearchTerms(customerId: string) {
-    // search_term_view requires a date range and does NOT support
-    // campaign.status or ad_group.status in WHERE — those must be
-    // filtered in code. search_term_view.status was also removed in v20.
+    // search_term_view is restrictive — it does NOT support campaign.status,
+    // ad_group.status, or search_term_view.status in either SELECT or WHERE.
+    // Only search_term_view fields, basic campaign/ad_group identifiers,
+    // and metrics are allowed. All filtering done in code.
     const rows = await this.query(customerId, `
       SELECT
         search_term_view.search_term,
         ad_group.id,
         ad_group.name,
-        ad_group.status,
         campaign.id,
         campaign.name,
-        campaign.status,
         metrics.impressions,
         metrics.clicks,
         metrics.cost_micros,
@@ -237,12 +236,8 @@ export class GoogleAdsService {
       WHERE segments.date DURING LAST_90_DAYS
       LIMIT 2000
     `);
-    // Filter to enabled campaigns/ad groups, return top 500 by cost
+    // Return top 500 by cost
     return rows
-      .filter((r: GoogleAdsRow) =>
-        r.campaign?.status === "ENABLED" &&
-        r.adGroup?.status === "ENABLED"
-      )
       .sort((a: GoogleAdsRow, b: GoogleAdsRow) =>
         Number(b.metrics?.costMicros ?? 0) - Number(a.metrics?.costMicros ?? 0)
       )
