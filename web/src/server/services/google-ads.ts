@@ -189,7 +189,7 @@ export class GoogleAdsService {
   }
 
   async fetchKeywords(customerId: string) {
-    const rows = await this.query(customerId, `
+    return this.query(customerId, `
       SELECT
         ad_group_criterion.keyword.text,
         ad_group_criterion.keyword.match_type,
@@ -213,55 +213,18 @@ export class GoogleAdsService {
       WHERE ad_group_criterion.status != 'REMOVED'
         AND ad_group.status != 'REMOVED'
         AND campaign.status = 'ENABLED'
-        AND segments.date DURING LAST_30_DAYS
     `);
-
-    // keyword_view + segments.date returns one row per keyword PER DAY.
-    // Deduplicate by (ad_group.id + keyword.text + match_type), aggregating metrics.
-    const deduped = new Map<string, GoogleAdsRow>();
-    for (const row of rows) {
-      const agId = String(row.adGroup?.id ?? "");
-      const text = row.adGroupCriterion?.keyword?.text ?? "";
-      const matchType = row.adGroupCriterion?.keyword?.matchType ?? "";
-      const key = `${agId}::${text}::${matchType}`;
-
-      if (!deduped.has(key)) {
-        // Clone the row so we don't mutate the original, with metrics as numbers
-        deduped.set(key, {
-          ...row,
-          metrics: {
-            impressions: Number(row.metrics?.impressions ?? 0),
-            clicks: Number(row.metrics?.clicks ?? 0),
-            costMicros: Number(row.metrics?.costMicros ?? 0),
-            conversions: Number(row.metrics?.conversions ?? 0),
-            averageCpc: Number(row.metrics?.averageCpc ?? 0),
-          },
-        });
-      } else {
-        // Aggregate metrics across days
-        const existing = deduped.get(key)!;
-        existing.metrics.impressions += Number(row.metrics?.impressions ?? 0);
-        existing.metrics.clicks += Number(row.metrics?.clicks ?? 0);
-        existing.metrics.costMicros += Number(row.metrics?.costMicros ?? 0);
-        existing.metrics.conversions += Number(row.metrics?.conversions ?? 0);
-        // averageCpc: keep last non-zero value (daily average isn't summable)
-        const cpc = Number(row.metrics?.averageCpc ?? 0);
-        if (cpc > 0) existing.metrics.averageCpc = cpc;
-      }
-    }
-
-    return [...deduped.values()];
   }
 
   async fetchSearchTerms(customerId: string) {
-    // Note: search_term_view.status was removed/deprecated in API v20.
-    // campaign.status filtering and cost sorting done in code to avoid
-    // GAQL INVALID_ARGUMENT errors with this resource.
+    // search_term_view.status was removed/deprecated in API v20.
+    // Campaign/ad-group status filtering and cost sorting done in code.
     const rows = await this.query(customerId, `
       SELECT
         search_term_view.search_term,
         ad_group.id,
         ad_group.name,
+        ad_group.status,
         campaign.id,
         campaign.name,
         campaign.status,
@@ -270,12 +233,12 @@ export class GoogleAdsService {
         metrics.cost_micros,
         metrics.conversions
       FROM search_term_view
-      WHERE segments.date DURING LAST_90_DAYS
+      WHERE campaign.status = 'ENABLED'
+        AND ad_group.status = 'ENABLED'
       LIMIT 2000
     `);
-    // Filter to enabled campaigns and return top 500 by cost
+    // Return top 500 by cost
     return rows
-      .filter((r: GoogleAdsRow) => r.campaign?.status === "ENABLED")
       .sort((a: GoogleAdsRow, b: GoogleAdsRow) =>
         Number(b.metrics?.costMicros ?? 0) - Number(a.metrics?.costMicros ?? 0)
       )
@@ -293,6 +256,7 @@ export class GoogleAdsService {
         ad_group_ad.status,
         ad_group.id,
         ad_group.name,
+        ad_group.status,
         campaign.id,
         campaign.advertising_channel_type,
         metrics.impressions,
@@ -305,7 +269,6 @@ export class GoogleAdsService {
       WHERE ad_group_ad.status != 'REMOVED'
         AND ad_group.status != 'REMOVED'
         AND campaign.status = 'ENABLED'
-        AND segments.date DURING LAST_30_DAYS
     `);
   }
 
